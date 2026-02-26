@@ -591,6 +591,9 @@ const shredSolo: Effect = {
       ? [0, 1, 2, 4, 5].map(i => scalePCs[i])
       : [0, 2, 3, 4, 6].map(i => scalePCs[i])
 
+    const bpm = midi.header.tempos[0]?.bpm ?? 120
+    const beatDur = 60 / bpm
+
     // ── Build chord map (time → pitch classes) ──────────
     type NoteInfo = { midi: number; time: number }
     const allNotes: NoteInfo[] = []
@@ -747,7 +750,10 @@ const shredSolo: Effect = {
       // Fit phrase to solo duration so ducking/envelopes stay aligned.
       const phraseEnd = fragmentEndOffset(frag)
       if (phraseEnd <= 0) return frag
-      const scale = Math.max(0.08, duration) / phraseEnd
+      // Keep phrase readable in slower songs instead of over-compressing it.
+      const minPhraseDur = beatDur * 2.5
+      const targetDur = Math.max(Math.max(0.08, duration), minPhraseDur)
+      const scale = targetDur / phraseEnd
       return frag.map((f) => ({
         midi: clampMidi(f.midi),
         timeOff: f.timeOff * scale,

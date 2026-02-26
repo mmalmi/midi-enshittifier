@@ -512,6 +512,34 @@ describe('shredSolo', () => {
     const soloEnd = Math.max(...notes.map(n => n.time + n.duration))
     expect(soloEnd - soloStart).toBeLessThanOrEqual(1.300001)
   })
+
+  it('keeps toccata phrase readable on slow songs', () => {
+    const midi = createTestMidi()
+    midi.header.tempos = [{ bpm: 92, ticks: 0 }]
+    const tb = midi.tracks.length
+    const rng = scriptedRng([
+      0.45, // windowSize
+      0.95, // skip window so fallback path is used
+      0.20, // fallback soloStart
+      0.10, // fallback soloDur => 0.7s (before minimum pacing)
+      0.45, // generator index => toccataQuotation
+      0.60, // base velocity
+      0.20, // envelope shape
+    ], 0.5)
+
+    getEffect('shredSolo').apply(midi, 1.0, rng)
+
+    const tracks = soloTracks(midi, tb)
+    const toccata = tracks.find(t => t.instrument === 19)
+    expect(toccata).toBeTruthy()
+
+    const notes = [...toccata!.notes].sort((a, b) => a.time - b.time)
+    const soloStart = notes[0].time
+    const soloEnd = Math.max(...notes.map(n => n.time + n.duration))
+    const phraseDur = soloEnd - soloStart
+    const minExpected = (60 / 92) * 2.5
+    expect(phraseDur).toBeGreaterThanOrEqual(minExpected - 0.0001)
+  })
 })
 
 // ── pipeline ─────────────────────────────────────────────
