@@ -19,7 +19,7 @@ test('upload MIDI → shows file info and enshittify button', async ({ page }) =
   await expect(page.getByText('test.mid')).toBeVisible()
   // All effects enabled by default, button should show count
   const btn = page.getByTestId('enshittify-btn')
-  await expect(btn).toContainText('(12)')
+  await expect(btn).toContainText(/\(\d+\)/)
   await expect(btn).toBeEnabled()
 })
 
@@ -41,15 +41,15 @@ test('advanced toggle shows/hides effects panel', async ({ page }) => {
   await fileInput.setInputFiles(FIXTURE)
 
   // Effects panel hidden by default
-  await expect(page.getByText('Pan Flute Apocalypse')).not.toBeVisible()
+  await expect(page.getByText('Drunk Musician')).not.toBeVisible()
 
   // Open advanced
   await page.getByTestId('advanced-toggle').click()
-  await expect(page.getByText('Pan Flute Apocalypse')).toBeVisible()
+  await expect(page.getByText('Drunk Musician')).toBeVisible()
 
   // Close advanced
   await page.getByTestId('advanced-toggle').click()
-  await expect(page.getByText('Pan Flute Apocalypse')).not.toBeVisible()
+  await expect(page.getByText('Drunk Musician')).not.toBeVisible()
 })
 
 test('disable all effects disables enshittify button', async ({ page }) => {
@@ -127,6 +127,7 @@ test('share → open shared URL → MIDI loads and enshittifies', async ({
   // Read clipboard URL
   const sharedUrl = await page.evaluate(() => navigator.clipboard.readText())
   expect(sharedUrl).toContain('#nhash1')
+  expect(sharedUrl).not.toContain('!')
 
   // Open shared URL in new page (same context = same IDB)
   const page2 = await context.newPage()

@@ -16,6 +16,7 @@
     effects.map((e) => ({ id: e.id, intensity: e.defaultIntensity })),
   )
   let fileName = $state('')
+  let shareName = $state('')
   let lastSeed = $state<number | null>(null)
   let copied = $state(false)
   let showAdvanced = $state(false)
@@ -23,26 +24,33 @@
   let loadingShared = $state(false)
   let loadError = $state<string | null>(null)
 
+  function defaultRecordName(name: string): string {
+    const n = name.trim()
+    if (!n) return ''
+    return n.replace(/\.[^/.]+$/, '')
+  }
+
   onMount(async () => {
-    const { parseUrlHash, loadFromNhash } = await import('$lib/sharing')
-    const { nhash, config } = parseUrlHash()
+    const { parseUrlHash, loadShareFromNhash } = await import('$lib/sharing')
+    const { nhash, config: legacyConfig } = parseUrlHash()
     if (!nhash) return
 
     loadingShared = true
     loadError = null
     try {
-      const data = await loadFromNhash(nhash)
-      if (!data) {
+      const shared = await loadShareFromNhash(nhash, legacyConfig)
+      if (!shared) {
         loadError = 'Could not load shared MIDI'
         return
       }
-      const midi = parseMidi(data)
+      const midi = parseMidi(shared.data)
       originalMidi = midi
       fileName = 'shared.mid'
+      shareName = shared.name ?? ''
 
-      if (config) {
-        enabled = config.effects
-        const result = enshittify(midi, config.effects, config.seed)
+      if (shared.config) {
+        enabled = shared.config.effects
+        const result = enshittify(midi, shared.config.effects, shared.config.seed)
         enshittifiedMidi = result.midi
         lastSeed = result.seed
       }
@@ -57,6 +65,7 @@
     const buf = new Uint8Array(await file.arrayBuffer())
     originalMidi = parseMidi(buf)
     fileName = file.name
+    shareName = defaultRecordName(file.name)
     enshittifiedMidi = null
     lastSeed = null
   }
@@ -87,6 +96,8 @@
       const payload = await shareMidi(writeMidi(originalMidi), {
         effects: enabled,
         seed: lastSeed ?? 0,
+      }, {
+        name: shareName,
       })
       const url = buildShareUrl(payload)
       await navigator.clipboard.writeText(url)
@@ -95,6 +106,7 @@
       recents = addRecent({
         nhash: payload.nhash,
         fileName,
+        recordName: shareName.trim() || undefined,
         config: { effects: enabled, seed: lastSeed ?? 0 },
       })
     } catch {
@@ -109,6 +121,7 @@
     originalMidi = null
     enshittifiedMidi = null
     fileName = ''
+    shareName = ''
     lastSeed = null
     loadError = null
     history.replaceState(null, '', location.pathname)
@@ -118,18 +131,20 @@
     loadingShared = true
     loadError = null
     try {
-      const { loadFromNhash } = await import('$lib/sharing')
-      const data = await loadFromNhash(entry.nhash)
-      if (!data) {
+      const { loadShareFromNhash } = await import('$lib/sharing')
+      const shared = await loadShareFromNhash(entry.nhash, entry.config)
+      if (!shared) {
         loadError = 'Could not load recent share'
         loadingShared = false
         return
       }
-      const midi = parseMidi(data)
+      const midi = parseMidi(shared.data)
       originalMidi = midi
       fileName = entry.fileName
-      enabled = entry.config.effects
-      const result = enshittify(midi, entry.config.effects, entry.config.seed)
+      shareName = shared.name ?? entry.recordName ?? defaultRecordName(entry.fileName)
+      const cfg = shared.config ?? entry.config
+      enabled = cfg.effects
+      const result = enshittify(midi, cfg.effects, cfg.seed)
       enshittifiedMidi = result.midi
       lastSeed = result.seed
     } catch {
@@ -234,6 +249,16 @@
 
   <!-- actions -->
   {#if enshittifiedMidi}
+    <div class="mb-2">
+      <div class="text-xs text-gray-500 mb-1">Name the masterpiece (optional)</div>
+      <input
+        type="text"
+        class="w-full rounded-lg bg-surface-light border border-surface-lighter px-3 py-2 text-sm text-white outline-none focus:border-primary-op50"
+        placeholder="Name the masterpiece"
+        bind:value={shareName}
+        maxlength="120"
+      />
+    </div>
     <div class="flex gap-2">
       <button class="btn-secondary flex-1" onclick={download} data-testid="download-btn">
         Download .mid

@@ -33,8 +33,11 @@
             class="flex-1 text-left cursor-pointer bg-transparent border-none text-inherit p-0"
             onclick={() => onload(entry)}
           >
-            <div class="text-sm truncate">{entry.fileName}</div>
+            <div class="text-sm truncate">{entry.recordName || entry.fileName}</div>
             <div class="text-xs text-gray-500">
+              {#if entry.recordName && entry.recordName !== entry.fileName}
+                {entry.fileName} ·
+              {/if}
               {entry.config.effects.length} effects · seed {entry.config.seed} · {relativeTime(entry.timestamp)}
             </div>
           </button>

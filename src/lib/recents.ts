@@ -3,6 +3,7 @@ import type { EnabledEffect } from './effects'
 export interface RecentShare {
   nhash: string
   fileName: string
+  recordName?: string
   config: { effects: EnabledEffect[]; seed: number }
   timestamp: number
 }

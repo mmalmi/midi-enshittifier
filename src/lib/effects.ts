@@ -13,22 +13,6 @@ export interface Effect {
 
 // ── Effects ──────────────────────────────────────────────
 
-const panFlute: Effect = {
-  id: 'panFlute',
-  name: 'Pan Flute Apocalypse',
-  description: 'Instruments shall become pan flute',
-  emoji: '🎺',
-  defaultIntensity: 0.7,
-  apply(midi, intensity, rng) {
-    for (const track of midi.tracks) {
-      if (track.channel === 9) continue // skip percussion
-      if (rng() < intensity) {
-        track.instrument = 75 // Pan Flute
-      }
-    }
-  },
-}
-
 const drunkNotes: Effect = {
   id: 'drunkNotes',
   name: 'Drunk Musician',
@@ -455,6 +439,7 @@ const melodyHijack: Effect = {
     const nonMelodyPool = ranked.filter((p) => !melodyTrackSet.has(p.track))
 
     const noveltyPrograms = [
+      75,  // Pan Flute
       105, // Banjo
       109, // Bagpipe
       108, // Kalimba
@@ -933,7 +918,6 @@ const shredSolo: Effect = {
 // ── Registry & pipeline ──────────────────────────────────
 
 export const effects: Effect[] = [
-  panFlute,
   drunkNotes,
   tempoTantrum,
   ghostDrums,

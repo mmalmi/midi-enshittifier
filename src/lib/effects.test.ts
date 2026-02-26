@@ -145,27 +145,6 @@ describe('MIDI round-trip', () => {
 
 // ── individual effects ───────────────────────────────────
 
-describe('panFlute', () => {
-  it('changes all non-percussion instruments at full intensity', () => {
-    const midi = createTestMidi()
-    getEffect('panFlute').apply(midi, 1.0, mulberry32(42))
-    for (const track of midi.tracks) {
-      if (track.channel !== 9) {
-        expect(track.instrument).toBe(75)
-      }
-    }
-  })
-
-  it('does nothing at zero intensity', () => {
-    const midi = createTestMidi()
-    const before = midi.tracks.map((t) => t.instrument)
-    getEffect('panFlute').apply(midi, 0, mulberry32(42))
-    midi.tracks.forEach((t, i) => {
-      expect(t.instrument).toBe(before[i])
-    })
-  })
-})
-
 describe('drunkNotes', () => {
   it('shifts some note pitches', () => {
     const midi = createTestMidi()
@@ -371,7 +350,7 @@ describe('melodyHijack', () => {
 
     getEffect('melodyHijack').apply(midi, 1.0, () => 0)
 
-    const noveltyPrograms = new Set([105, 109, 108, 112, 21, 13, 110, 78, 114])
+    const noveltyPrograms = new Set([75, 105, 109, 108, 112, 21, 13, 110, 78, 114])
     const cameoTracks = midi.tracks.slice(tb)
     expect(cameoTracks.length).toBeGreaterThan(0)
     for (const t of cameoTracks) {
@@ -550,15 +529,14 @@ describe('enshittify', () => {
     const { midi } = enshittify(
       orig,
       [
-        { id: 'panFlute', intensity: 1 },
-        { id: 'drunkNotes', intensity: 0.5 },
+        { id: 'tempoTantrum', intensity: 1 },
       ],
       42,
     )
     // original should be untouched
-    expect(orig.tracks[0].instrument).not.toBe(75)
-    // enshittified should have pan flute
-    expect(midi.tracks[0].instrument).toBe(75)
+    expect(orig.tracks[0].notes[1].time).toBe(0.5)
+    // enshittified should be time-warped
+    expect(midi.tracks[0].notes[1].time).not.toBe(0.5)
   })
 
   it('is deterministic with same seed', () => {
