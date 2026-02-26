@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURE = path.join(__dirname, 'fixtures', 'test.mid')
 const REAL_MIDI = path.join(__dirname, 'fixtures', 'entertainer.mid')
+const ALT_MIDI = path.join(__dirname, 'fixtures', 'clairdelune.mid')
 
 test('shows drop zone on load', async ({ page }) => {
   await page.goto('/')
@@ -137,4 +138,54 @@ test('share → open shared URL → MIDI loads and enshittifies', async ({
   await expect(page2.getByText('shared.mid')).toBeVisible({ timeout: 10_000 })
   await expect(page2.getByText(/seed:/)).toBeVisible()
   await expect(page2.getByTestId('download-btn')).toBeVisible()
+})
+
+test('reroll stops currently playing enshittified track', async ({ page }) => {
+  await page.goto('/')
+  const fileInput = page.locator('input[type="file"]')
+  await fileInput.setInputFiles(REAL_MIDI)
+
+  await page.getByTestId('enshittify-btn').click()
+  await expect(page.getByTestId('reroll-btn')).toBeVisible()
+
+  const shiteBtn = page.getByRole('button', { name: /Enshittified/ })
+  await shiteBtn.click()
+  await expect(shiteBtn).toContainText('⏹', { timeout: 30_000 })
+
+  await page.getByTestId('reroll-btn').click()
+  await expect(shiteBtn).toContainText('▶ Enshittified')
+})
+
+test('switching file while playing stops background playback', async ({ page }) => {
+  await page.addInitScript(() => {
+    ;(window as any).__audioStarts = 0
+    const origStart = AudioBufferSourceNode.prototype.start
+    AudioBufferSourceNode.prototype.start = function (...args: any[]) {
+      ;(window as any).__audioStarts++
+      return origStart.apply(this, args)
+    }
+  })
+
+  await page.goto('/')
+  const fileInput = page.locator('input[type="file"]')
+  await fileInput.setInputFiles(REAL_MIDI)
+
+  const playBtn = page.getByRole('button', { name: /Original/ })
+  await playBtn.click()
+  await expect(playBtn).toContainText('⏹', { timeout: 30_000 })
+  await page.waitForTimeout(1200)
+
+  const startsBeforeSwitch = await page.evaluate(() => (window as any).__audioStarts)
+  expect(startsBeforeSwitch).toBeGreaterThan(0)
+
+  await page.getByRole('button', { name: 'change' }).click()
+  await expect(page.getByText('Drop a MIDI file here')).toBeVisible()
+
+  await page.waitForTimeout(1200)
+  const startsAfterSwitch = await page.evaluate(() => (window as any).__audioStarts)
+  expect(startsAfterSwitch - startsBeforeSwitch).toBeLessThanOrEqual(2)
+
+  const newFileInput = page.locator('input[type="file"]')
+  await newFileInput.setInputFiles(ALT_MIDI)
+  await expect(page.getByText('clairdelune.mid')).toBeVisible()
 })

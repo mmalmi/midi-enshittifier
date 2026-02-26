@@ -4,10 +4,18 @@
   import type { MidiFile } from '$lib/midi'
   import DropZone from './components/DropZone.svelte'
   import EffectsPanel from './components/EffectsPanel.svelte'
+  import JamLogo from './components/JamLogo.svelte'
   import Player from './components/Player.svelte'
   import Recents from './components/Recents.svelte'
+  import appLogo from './assets/pepe-listening-transparent.png?inline'
   import { effects, enshittify, type EnabledEffect } from '$lib/effects'
   import { getRecents, addRecent, removeRecent, type RecentShare } from '$lib/recents'
+  import {
+    parseUrlHash,
+    loadShareFromNhash,
+    shareMidi,
+    buildShareUrl,
+  } from '$lib/sharing'
 
   let originalMidi = $state<MidiFile | null>(null)
   let enshittifiedMidi = $state<MidiFile | null>(null)
@@ -23,6 +31,7 @@
   let recents = $state<RecentShare[]>(getRecents())
   let loadingShared = $state(false)
   let loadError = $state<string | null>(null)
+  let isPlaying = $state(false)
 
   function defaultRecordName(name: string): string {
     const n = name.trim()
@@ -31,7 +40,6 @@
   }
 
   onMount(async () => {
-    const { parseUrlHash, loadShareFromNhash } = await import('$lib/sharing')
     const { nhash, config: legacyConfig } = parseUrlHash()
     if (!nhash) return
 
@@ -92,7 +100,6 @@
   async function share() {
     if (!originalMidi) return
     try {
-      const { shareMidi, buildShareUrl } = await import('$lib/sharing')
       const payload = await shareMidi(writeMidi(originalMidi), {
         effects: enabled,
         seed: lastSeed ?? 0,
@@ -131,7 +138,6 @@
     loadingShared = true
     loadError = null
     try {
-      const { loadShareFromNhash } = await import('$lib/sharing')
       const shared = await loadShareFromNhash(entry.nhash, entry.config)
       if (!shared) {
         loadError = 'Could not load recent share'
@@ -168,9 +174,14 @@
     const s = Math.floor(dur % 60)
     return `${tracks} tracks · ${notes} notes · ${m}:${s.toString().padStart(2, '0')}`
   }
+
+  function handlePlaybackState(playing: boolean) {
+    isPlaying = playing
+  }
 </script>
 
 <header class="text-center mb-8">
+  <JamLogo src={appLogo} alt="Pepe listening to music" playing={isPlaying} />
   <h1 class="text-3xl font-bold mb-1">
     <span class="text-primary">MIDI</span> Enshittifier
   </h1>
@@ -179,7 +190,8 @@
 
 {#if loadingShared}
   <div class="text-center py-12 text-gray-400" data-testid="loading-shared">
-    Loading shared MIDI...
+    <span class="inline-block spin-unicorn" aria-hidden="true">🦄</span>
+    Summoning shared MIDI...
   </div>
 {:else if !originalMidi}
   {#if loadError}
@@ -244,7 +256,11 @@
 
   <!-- player -->
   <div class="mb-4">
-    <Player original={originalMidi} enshittified={enshittifiedMidi} />
+    <Player
+      original={originalMidi}
+      enshittified={enshittifiedMidi}
+      onPlaybackState={handlePlaybackState}
+    />
   </div>
 
   <!-- actions -->

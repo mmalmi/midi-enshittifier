@@ -1,24 +1,30 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import type { MidiFile } from '$lib/midi'
   import { MidiPlayer } from '$lib/player'
 
   let {
     original,
     enshittified,
+    onPlaybackState,
   }: {
     original: MidiFile | null
     enshittified: MidiFile | null
+    onPlaybackState?: (isPlaying: boolean) => void
   } = $props()
 
   let player = new MidiPlayer()
   let playing = $state(false)
   let loading = $state(false)
   let which = $state<'original' | 'enshittified' | null>(null)
+  let playReq = $state(0)
   let currentTime = $state(0)
   let duration = $state(0)
   let seeking = $state(false)
   let seekTime = $state(0)
   let barEl: HTMLDivElement
+  let prevOriginal = $state<MidiFile | null>(null)
+  let prevEnshittified = $state<MidiFile | null>(null)
 
   player.onProgress((t, d) => {
     if (!seeking) {
@@ -32,20 +38,39 @@
     currentTime = 0
   })
 
+  $effect(() => {
+    onPlaybackState?.(playing)
+  })
+
+  onDestroy(() => {
+    player.fullStop()
+    onPlaybackState?.(false)
+  })
+
   async function play(version: 'original' | 'enshittified') {
     const midi = version === 'original' ? original : enshittified
     if (!midi) return
+    const req = ++playReq
     player.stop()
     playing = false
     loading = true
     which = version
-    await player.play(midi)
-    loading = false
-    playing = true
-    duration = player.duration
+    try {
+      await player.play(midi)
+      if (req !== playReq || which !== version) return
+      loading = false
+      playing = player.playing
+      duration = player.duration
+    } catch {
+      if (req !== playReq) return
+      loading = false
+      playing = false
+      if (which === version) which = null
+    }
   }
 
   function stop() {
+    playReq++
     player.stop()
     playing = false
     loading = false
@@ -109,20 +134,37 @@
     window.addEventListener('touchend', onEnd)
   }
 
-  // Stop playback when the active file changes
+  // Stop playback when the currently playing source changes.
   $effect(() => {
-    original  // track dependency
-    stop()
+    const currentOriginal = original
+    const currentEnshittified = enshittified
+
+    const originalChanged = currentOriginal !== prevOriginal
+    const enshittifiedChanged = currentEnshittified !== prevEnshittified
+
+    if (
+      ((playing || loading) && which === 'original' && originalChanged) ||
+      ((playing || loading) && which === 'enshittified' && enshittifiedChanged)
+    ) {
+      stop()
+    }
+
+    prevOriginal = currentOriginal
+    prevEnshittified = currentEnshittified
   })
 
   let displayTime = $derived(seeking ? seekTime : currentTime)
   let pct = $derived(duration > 0 ? (displayTime / duration) * 100 : 0)
+  let originalLoading = $derived(which === 'original' && loading)
+  let enshittifiedLoading = $derived(which === 'enshittified' && loading)
+  let originalPlaying = $derived(which === 'original' && playing)
+  let enshittifiedPlaying = $derived(which === 'enshittified' && playing)
 </script>
 
 <div class="card space-y-3">
   <div class="flex gap-2">
     <button
-      class="flex-1 py-2 rounded-lg font-medium text-sm transition-all duration-150"
+      class="play-btn flex-1 py-2 rounded-lg font-medium text-sm transition-all duration-150"
       class:bg-primary={which === 'original'}
       class:text-white={which === 'original'}
       class:bg-surface-lighter={which !== 'original'}
@@ -130,16 +172,21 @@
       disabled={!original || loading}
       onclick={() => (which === 'original' && playing ? stop() : play('original'))}
     >
-      {#if which === 'original' && loading}
-        Loading...
-      {:else if which === 'original' && playing}
-        ⏹ Original
-      {:else}
-        ▶ Original
-      {/if}
+      <span class="play-btn-stack">
+        <span style:visibility={originalLoading ? 'hidden' : 'visible'}>
+          {#if originalPlaying}
+            ⏹ Original
+          {:else}
+            ▶ Original
+          {/if}
+        </span>
+        <span style:visibility={originalLoading ? 'visible' : 'hidden'}>
+          <span class="unicorn-loader spin-unicorn" aria-label="Loading">🦄</span>
+        </span>
+      </span>
     </button>
     <button
-      class="flex-1 py-2 rounded-lg font-medium text-sm transition-all duration-150"
+      class="play-btn flex-1 py-2 rounded-lg font-medium text-sm transition-all duration-150"
       class:bg-primary={which === 'enshittified'}
       class:text-white={which === 'enshittified'}
       class:bg-surface-lighter={which !== 'enshittified'}
@@ -148,13 +195,18 @@
       onclick={() =>
         which === 'enshittified' && playing ? stop() : play('enshittified')}
     >
-      {#if which === 'enshittified' && loading}
-        Loading...
-      {:else if which === 'enshittified' && playing}
-        ⏹ Enshittified
-      {:else}
-        ▶ Enshittified
-      {/if}
+      <span class="play-btn-stack">
+        <span style:visibility={enshittifiedLoading ? 'hidden' : 'visible'}>
+          {#if enshittifiedPlaying}
+            ⏹ Enshittified
+          {:else}
+            ▶ Enshittified
+          {/if}
+        </span>
+        <span style:visibility={enshittifiedLoading ? 'visible' : 'hidden'}>
+          <span class="unicorn-loader spin-unicorn" aria-label="Loading">🦄</span>
+        </span>
+      </span>
     </button>
   </div>
 

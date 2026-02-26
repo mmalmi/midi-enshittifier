@@ -70,6 +70,8 @@ export class MidiPlayer {
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
   private activeVoices = 0
+  private playSession = 0
+  private activeSession = 0
   private startTs = 0
   private intervalId: ReturnType<typeof setInterval> | null = null
   private rafId: number | null = null
@@ -97,13 +99,17 @@ export class MidiPlayer {
 
   async play(midi: MidiFile, from = 0) {
     this.stop()
+    const session = this.playSession
     this.currentMidi = midi
     this._loading = true
 
-    this.ctx = new AudioContext()
-    this.master = this.ctx.createGain()
-    this.master.gain.value = 0.5
-    this.master.connect(this.ctx.destination)
+    const ctx = new AudioContext()
+    const master = ctx.createGain()
+    master.gain.value = 0.5
+    master.connect(ctx.destination)
+
+    this.ctx = ctx
+    this.master = master
 
     this._duration = calcDuration(midi)
 
@@ -123,11 +129,11 @@ export class MidiPlayer {
     const entries = await Promise.all(
       [...needed].map(async (name) => {
         try {
-          const inst = await loadInstrument(this.ctx!, name, this.master!)
+          const inst = await loadInstrument(ctx, name, master)
           return [name, inst] as const
         } catch {
           try {
-            const inst = await loadInstrument(this.ctx!, 'acoustic_grand_piano', this.master!)
+            const inst = await loadInstrument(ctx, 'acoustic_grand_piano', master)
             return [name, inst] as const
           } catch {
             return null
@@ -135,6 +141,13 @@ export class MidiPlayer {
         }
       }),
     )
+
+    if (session !== this.playSession || this.ctx !== ctx) {
+      this._loading = false
+      void ctx.close().catch(() => {})
+      return
+    }
+
     for (const entry of entries) {
       if (entry) this.loadedInstruments.set(entry[0], entry[1])
     }
@@ -144,8 +157,9 @@ export class MidiPlayer {
     // Check if stopped during loading
     if (!this.ctx) return
 
-    this.startTs = this.ctx.currentTime - from
+    this.startTs = ctx.currentTime - from
     this._playing = true
+    this.activeSession = session
     this.activeVoices = 0
 
     // Build sorted note queue
@@ -161,11 +175,16 @@ export class MidiPlayer {
     this.queueIdx = 0
 
     this.scheduleNotes()
-    this.intervalId = setInterval(() => this.scheduleNotes(), INTERVAL)
+    this.intervalId = setInterval(() => {
+      if (session !== this.playSession) return
+      this.scheduleNotes()
+    }, INTERVAL)
     this.tick()
   }
 
   stop() {
+    this.playSession++
+    this.activeSession = 0
     this._playing = false
     this._loading = false
     if (this.intervalId != null) {
@@ -223,13 +242,17 @@ export class MidiPlayer {
         const t0 = Math.max(this.startTs + note.time, this.ctx.currentTime + 0.005)
         const dur = note.duration
         if (dur > 0) {
+          const session = this.activeSession
           entry.play(note.midi, t0, {
             duration: dur,
             gain: note.velocity,
           })
           this.activeVoices++
           const ms = Math.max(0, (t0 - this.ctx.currentTime + Math.min(dur, 0.3) + 0.1) * 1000)
-          setTimeout(() => { this.activeVoices = Math.max(0, this.activeVoices - 1) }, ms)
+          setTimeout(() => {
+            if (session !== this.activeSession) return
+            this.activeVoices = Math.max(0, this.activeVoices - 1)
+          }, ms)
         }
       }
       this.queueIdx++

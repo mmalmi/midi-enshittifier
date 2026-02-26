@@ -21,6 +21,90 @@ body {
   padding: 2rem 1rem;
 }
 
+.spin-unicorn {
+  display: inline-block;
+  font-size: 2.2rem;
+  line-height: 1;
+  animation: unicorn-spin 0.9s linear infinite;
+  transform-origin: center;
+}
+
+.unicorn-loader {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.play-btn {
+  min-height: 3.3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.play-btn-stack {
+  display: inline-grid;
+  place-items: center;
+}
+
+.play-btn-stack > span {
+  grid-area: 1 / 1;
+}
+
+@keyframes unicorn-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app-logo {
+  display: block;
+  width: 96px;
+  max-width: 28vw;
+  height: auto;
+  margin: 0;
+  transform-origin: center bottom;
+}
+
+.logo-wrap {
+  --logo-x: 0px;
+  --logo-y: 0px;
+  display: flex;
+  justify-content: center;
+  margin: 0 auto 0.6rem;
+  transform: translate(var(--logo-x), var(--logo-y));
+  transition: transform 1s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  z-index: 8;
+  pointer-events: none;
+}
+
+.logo-wrap.wander {
+  transition: transform 0.22s linear;
+}
+
+.logo-wrap.returning {
+  transition: transform 0.3s linear;
+}
+
+.app-logo.jammin {
+  animation: logo-jam 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes logo-jam {
+  from {
+    transform: translateY(0) rotate(-4deg);
+  }
+  to {
+    transform: translateY(-7px) rotate(4deg);
+  }
+}
+
 input[type='range'] {
   -webkit-appearance: none;
   appearance: none;

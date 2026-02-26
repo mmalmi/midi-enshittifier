@@ -542,6 +542,7 @@ describe('shredSolo', () => {
     const minExpected = (60 / 92) * 2.5
     expect(phraseDur).toBeGreaterThanOrEqual(minExpected - 0.0001)
   })
+
 })
 
 // ── pipeline ─────────────────────────────────────────────
