@@ -65,6 +65,47 @@ function createDrumHeavyMidi(): MidiFile {
   return midi
 }
 
+function createHijackMidi(): MidiFile {
+  const midi = createMidi()
+
+  const melody = addTrack(midi, 0)
+  for (let i = 0; i < 24; i++) {
+    addNote(melody, {
+      midi: [72, 74, 76, 77, 79, 81][i % 6],
+      time: i * 0.25,
+      duration: 0.22,
+      velocity: 0.85,
+    })
+  }
+
+  const pad = addTrack(midi, 3)
+  for (let i = 0; i < 12; i++) {
+    addNote(pad, {
+      midi: [60, 64, 67, 69][i % 4],
+      time: i * 0.5,
+      duration: 0.45,
+      velocity: 0.75,
+    })
+  }
+
+  const bass = addTrack(midi, 2)
+  for (let i = 0; i < 12; i++) {
+    addNote(bass, {
+      midi: [36, 38, 40, 43][i % 4],
+      time: i * 0.5,
+      duration: 0.45,
+      velocity: 0.72,
+    })
+  }
+
+  const drums = addTrack(midi, 9)
+  for (let i = 0; i < 24; i++) {
+    addNote(drums, { midi: i % 2 === 0 ? 36 : 42, time: i * 0.25, duration: 0.08, velocity: 0.8 })
+  }
+
+  return midi
+}
+
 function getEffect(id: string) {
   return effects.find((e) => e.id === id)!
 }
@@ -316,6 +357,49 @@ describe('tremoloTerror', () => {
     const before = totalNotes(midi)
     getEffect('tremoloTerror').apply(midi, 1.0, mulberry32(42))
     expect(totalNotes(midi)).toBeGreaterThan(before)
+  })
+})
+
+describe('melodyHijack', () => {
+  it('adds novelty cameo tracks while keeping bass stable', () => {
+    const midi = createHijackMidi()
+    const tb = midi.tracks.length
+    const bass = midi.tracks.find(t => t.channel === 2)!
+    const melody = midi.tracks.find(t => t.channel === 0)!
+    const bassBefore = bass.notes.map(n => n.velocity)
+    const melodyBefore = melody.notes.map(n => n.velocity)
+
+    getEffect('melodyHijack').apply(midi, 1.0, () => 0)
+
+    const noveltyPrograms = new Set([105, 109, 108, 112, 21, 13, 110, 78, 114])
+    const cameoTracks = midi.tracks.slice(tb)
+    expect(cameoTracks.length).toBeGreaterThan(0)
+    for (const t of cameoTracks) {
+      expect(t.channel).not.toBe(9)
+      expect(noveltyPrograms.has(t.instrument)).toBe(true)
+      expect(t.notes.length).toBeGreaterThan(0)
+    }
+
+    const bassAfter = bass.notes.map(n => n.velocity)
+    expect(bassAfter).toEqual(bassBefore)
+
+    const melodyAfter = melody.notes.map(n => n.velocity)
+    const changedMelody = melodyAfter.filter((v, i) => v !== melodyBefore[i]).length
+    expect(changedMelody).toBeGreaterThan(0)
+  })
+
+  it('can occasionally hijack non-melody tracks', () => {
+    const midi = createHijackMidi()
+    const pad = midi.tracks.find(t => t.channel === 3)!
+    const padBefore = pad.notes.map(n => n.velocity)
+    // First bar: trigger cameo and choose non-melody (0.9 > 0.85), then mostly no more cameos.
+    const rng = scriptedRng([0, 0.9, 0, 0, 0, 0], 0.9)
+
+    getEffect('melodyHijack').apply(midi, 1.0, rng)
+
+    const padAfter = pad.notes.map(n => n.velocity)
+    const changedPad = padAfter.filter((v, i) => v !== padBefore[i]).length
+    expect(changedPad).toBeGreaterThan(0)
   })
 })
 

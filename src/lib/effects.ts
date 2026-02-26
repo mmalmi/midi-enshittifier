@@ -399,6 +399,149 @@ const tremoloTerror: Effect = {
   },
 }
 
+const melodyHijack: Effect = {
+  id: 'melodyHijack',
+  name: 'Melody Hijack',
+  description: 'Novelty instrument cameos mostly on melody lines',
+  emoji: '🎪',
+  defaultIntensity: 0.35,
+  apply(midi, intensity, rng) {
+    let maxTime = 0
+    for (const track of midi.tracks) {
+      for (const note of track.notes) {
+        maxTime = Math.max(maxTime, note.time + note.duration)
+      }
+    }
+    if (maxTime <= 0) return
+
+    const bpm = midi.header.tempos[0]?.bpm ?? 120
+    const beatDur = 60 / bpm
+    const barDur = beatDur * 4
+
+    type Profile = {
+      track: MidiTrack
+      avgPitch: number
+      melodyScore: number
+      noteCount: number
+    }
+    const profiles: Profile[] = []
+    for (const track of midi.tracks) {
+      if (track.channel === 9 || track.notes.length === 0) continue
+      const sorted = [...track.notes].sort((a, b) => a.time - b.time)
+      let pitchSum = 0
+      let overlaps = 0
+      let prevEnd = -1
+      for (const note of sorted) {
+        pitchSum += note.midi
+        if (note.time < prevEnd - 0.001) overlaps++
+        prevEnd = Math.max(prevEnd, note.time + note.duration)
+      }
+      const avgPitch = pitchSum / sorted.length
+      const overlapRatio = overlaps / sorted.length
+      const density = sorted.length / Math.max(1, maxTime)
+      const melodyScore = avgPitch - overlapRatio * 22 + Math.min(8, density * 1.5)
+      profiles.push({ track, avgPitch, melodyScore, noteCount: sorted.length })
+    }
+    if (profiles.length === 0) return
+
+    // Keep bass mostly stable: avoid very low-average tracks in cameo sources.
+    const sourceProfiles = profiles.filter((p) => p.avgPitch >= 50)
+    if (sourceProfiles.length === 0) return
+
+    const ranked = [...sourceProfiles].sort((a, b) => b.melodyScore - a.melodyScore)
+    const melodyPoolSize = Math.max(1, Math.min(2, ranked.length))
+    const melodyPool = ranked.slice(0, melodyPoolSize)
+    const melodyTrackSet = new Set(melodyPool.map((p) => p.track))
+    const nonMelodyPool = ranked.filter((p) => !melodyTrackSet.has(p.track))
+
+    const noveltyPrograms = [
+      105, // Banjo
+      109, // Bagpipe
+      108, // Kalimba
+      112, // Tinkle Bell
+      21,  // Accordion
+      13,  // Xylophone
+      110, // Fiddle
+      78,  // Whistle
+      114, // Steel Drums
+    ]
+
+    function clampMidi(n: number): number {
+      return Math.max(0, Math.min(127, n))
+    }
+
+    const usedChannels = new Set(midi.tracks.map((t) => t.channel))
+    function allocChannel(): number {
+      for (let c = 0; c < 16; c++) {
+        if (c === 9) continue
+        if (!usedChannels.has(c)) {
+          usedChannels.add(c)
+          return c
+        }
+      }
+      let c = Math.floor(rng() * 15)
+      if (c >= 9) c++
+      return c
+    }
+
+    const chancePerBar = 0.03 + intensity * 0.09 // ~3-12% each bar
+    const maxCameos = Math.max(1, 2 + Math.floor(intensity * 6))
+    let cameoCount = 0
+
+    for (let barStart = 0; barStart < maxTime && cameoCount < maxCameos; barStart += barDur) {
+      if (rng() >= chancePerBar) continue
+
+      const chooseMelody = nonMelodyPool.length === 0 || rng() < 0.85
+      const pool = chooseMelody ? melodyPool : nonMelodyPool
+      if (pool.length === 0) continue
+      const src = pool[Math.floor(rng() * pool.length)]
+
+      const windowStart = barStart + rng() * barDur * 0.35
+      const windowDur = barDur * (0.4 + rng() * 0.8)
+      const windowEnd = Math.min(maxTime, windowStart + windowDur)
+
+      const clippedNotes: Array<{ midi: number; time: number; duration: number; velocity: number; srcIdx: number }> = []
+      for (let i = 0; i < src.track.notes.length; i++) {
+        const note = src.track.notes[i]
+        const noteEnd = note.time + note.duration
+        if (note.time >= windowEnd || noteEnd <= windowStart) continue
+
+        const start = Math.max(note.time, windowStart)
+        const end = Math.min(noteEnd, windowEnd)
+        const octaveShift = rng() < 0.2 ? (rng() < 0.5 ? -12 : 12) : 0
+        clippedNotes.push({
+          midi: clampMidi(note.midi + octaveShift),
+          time: start,
+          duration: Math.max(0.03, end - start),
+          velocity: Math.max(0.1, Math.min(1, note.velocity * (0.75 + rng() * 0.45))),
+          srcIdx: i,
+        })
+      }
+      if (clippedNotes.length === 0) continue
+
+      const cameoTrack = addTrack(midi, allocChannel())
+      cameoTrack.instrument = noveltyPrograms[Math.floor(rng() * noveltyPrograms.length)]
+      for (const n of clippedNotes) {
+        addNote(cameoTrack, {
+          midi: n.midi,
+          time: n.time,
+          duration: n.duration,
+          velocity: n.velocity,
+        })
+      }
+
+      // Make cameo audible without deleting source notes.
+      for (const n of clippedNotes) {
+        const srcNote = src.track.notes[n.srcIdx]
+        const duck = chooseMelody ? (0.2 + rng() * 0.2) : (0.6 + rng() * 0.2)
+        srcNote.velocity = Math.max(0.05, srcNote.velocity * duck)
+      }
+
+      cameoCount++
+    }
+  },
+}
+
 const shredSolo: Effect = {
   id: 'shredSolo',
   name: 'Shred Solo',
@@ -795,6 +938,7 @@ export const effects: Effect[] = [
   moodSwing,
   devilsInterval,
   tremoloTerror,
+  melodyHijack,
   shredSolo,
 ]
 

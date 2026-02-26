@@ -294,7 +294,11 @@ export function writeMidi(midi: MidiFile): Uint8Array {
       noteEvents.push({ tick: note.ticks, type: 'on', midi: note.midi, velocity: Math.round(note.velocity * 127) })
       noteEvents.push({ tick: note.ticks + note.durationTicks, type: 'off', midi: note.midi, velocity: 0 })
     }
-    noteEvents.sort((a, b) => a.tick - b.tick || (a.type === 'off' ? -1 : 1))
+    noteEvents.sort((a, b) => {
+      if (a.tick !== b.tick) return a.tick - b.tick
+      if (a.type === b.type) return 0
+      return a.type === 'off' ? -1 : 1
+    })
 
     let prevTick = 0
     for (const ev of noteEvents) {
