@@ -83,9 +83,8 @@ const tempoTantrum: Effect = {
       return speed
     }
 
-    // Apply warp to all notes
+    // Apply warp to all notes, including drums, so groove stays aligned.
     for (const track of midi.tracks) {
-      if (track.channel === 9) continue
       for (const note of track.notes) {
         const speed = localSpeed(note.time)
         const endWarped = warp(note.time + note.duration)

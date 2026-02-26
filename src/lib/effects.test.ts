@@ -65,6 +65,18 @@ function createDrumHeavyMidi(): MidiFile {
   return midi
 }
 
+function createSyncMidi(): MidiFile {
+  const midi = createMidi()
+  const lead = addTrack(midi, 0)
+  const drums = addTrack(midi, 9)
+  for (let i = 0; i < 8; i++) {
+    const t = i * 0.5
+    addNote(lead, { midi: 60 + (i % 3), time: t, duration: 0.25, velocity: 0.8 })
+    addNote(drums, { midi: i % 2 === 0 ? 36 : 42, time: t, duration: 0.12, velocity: 0.75 })
+  }
+  return midi
+}
+
 function createHijackMidi(): MidiFile {
   const midi = createMidi()
 
@@ -194,6 +206,18 @@ describe('tempoTantrum', () => {
       }
     }
   })
+
+  it('keeps drum and melodic note starts aligned', () => {
+    const midi = createSyncMidi()
+    const lead = midi.tracks.find((t) => t.channel === 0)!
+    const drums = midi.tracks.find((t) => t.channel === 9)!
+    const before = lead.notes.map((n, i) => n.time - drums.notes[i].time)
+    getEffect('tempoTantrum').apply(midi, 1.0, mulberry32(42))
+    const after = lead.notes.map((n, i) => n.time - drums.notes[i].time)
+    for (let i = 0; i < before.length; i++) {
+      expect(Math.abs(after[i] - before[i])).toBeLessThan(0.000001)
+    }
+  })
 })
 
 describe('ghostDrums', () => {
@@ -284,7 +308,6 @@ describe('echoChamber', () => {
 describe('percussion preservation', () => {
   it('keeps original drum notes intact for non-drum effects', () => {
     const preserve = [
-      'tempoTantrum',
       'cpuThrottle',
       'butterFingers',
       'volumeRollercoaster',
