@@ -5,6 +5,7 @@
   import { getFollowsForPubkey } from '$lib/nostr/follows'
   import { listUserSongs, type SongSummary } from '$lib/songs'
   import { buildSongRoute } from '$lib/router'
+  import { animalNameFromNpub } from '$lib/animalName'
 
   interface FeedItem extends SongSummary {
     route: string
@@ -131,7 +132,7 @@
         <a class="card no-underline text-white hover:border-primary" href={item.route}>
           <div class="text-sm font-medium">{item.title}</div>
           <div class="text-xs text-gray-400 mt-1">
-            <span class="text-primary">{item.ownerNpub.slice(0, 12)}...</span>
+            <span class="text-primary">{animalNameFromNpub(item.ownerNpub)}</span>
             · {item.effects.length} effects · seed {item.seed} · {relTime(item.createdAt)}
           </div>
         </a>

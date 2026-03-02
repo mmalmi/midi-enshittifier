@@ -1,5 +1,6 @@
 <script lang="ts">
   import { buildProfileRoute } from '$lib/router'
+  import { animalNameFromPubkey } from '$lib/animalName'
   import { nostrStore } from '$lib/nostr/store'
   import {
     loginWithExtension,
@@ -22,6 +23,8 @@
     if (!value) return ''
     return `${value.slice(0, 10)}...${value.slice(-6)}`
   }
+
+  let displayName = $derived(animalNameFromPubkey(pubkey))
 
   function avatarSeed(value: string | null): { text: string; hue: number } {
     if (!value) return { text: '?', hue: 200 }
@@ -91,7 +94,8 @@
       </a>
     {/if}
     <span class="text-gray-400">{loginType}</span>
-    <span class="text-gray-300">{shortNpub(npub)}</span>
+    <span class="text-gray-300">{displayName}</span>
+    <span class="text-gray-500">{shortNpub(npub)}</span>
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doExtensionLogin}>Ext</button>
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={() => (showNsec = !showNsec)}>Nsec</button>
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doLocalSwitch}>Local</button>

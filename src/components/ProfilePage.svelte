@@ -6,6 +6,7 @@
   import { getNostrState } from '$lib/nostr/store'
   import { followPubkey, getFollowsForPubkey, unfollowPubkey } from '$lib/nostr/follows'
   import { getFollowers } from '$lib/nostr/socialGraph'
+  import { animalNameFromNpub } from '$lib/animalName'
 
   interface Props {
     npub: string
@@ -89,7 +90,8 @@
 
 <div class="space-y-4">
   <div class="card">
-    <div class="text-lg font-semibold">{npub}</div>
+    <div class="text-lg font-semibold">{animalNameFromNpub(npub)}</div>
+    <div class="text-xs text-gray-500 mt-1">{npub}</div>
     <div class="text-xs text-gray-400 mt-1">
       {songs.length} songs · {followingCount} following · {followerCount} followers
     </div>
