@@ -1,8 +1,10 @@
 import { BlossomStore, FallbackStore, HashTree, LinkType, type CID, type RefResolver, type TreeEntry } from '@hashtree/core'
 import { DexieStore } from '@hashtree/dexie'
+import { nip19 } from 'nostr-tools'
 import type { EnabledEffect } from './effects'
 import { buildSongRoute } from './router'
 import { getNostrState } from './nostr/store'
+import { getNdk } from './nostr/ndk'
 import { getResolver, resolverKeyForSongs } from './nostr/resolver'
 
 export interface SongManifest {
@@ -66,7 +68,7 @@ interface SongsTree {
 interface SongsDeps {
   tree: SongsTree
   resolver: RefResolver
-  getOwner: () => { pubkey: string; npub: string } | null
+  getOwner: () => Promise<{ pubkey: string; npub: string } | null> | { pubkey: string; npub: string } | null
   nowUnix: () => number
   makeSongId: (title: string) => string
   pushTarget?: unknown
@@ -99,10 +101,22 @@ function getDefaultContext(): { tree: HashTree; blossomStore: BlossomStore } {
   return { tree: defaultTree, blossomStore: defaultBlossomStore }
 }
 
-function defaultOwner(): { pubkey: string; npub: string } | null {
+async function defaultOwner(): Promise<{ pubkey: string; npub: string } | null> {
   const state = getNostrState()
-  if (!state.pubkey || !state.npub) return null
-  return { pubkey: state.pubkey, npub: state.npub }
+  if (state.pubkey && state.npub) return { pubkey: state.pubkey, npub: state.npub }
+
+  // Fallback: recover identity from active signer if store update lagged.
+  const signer = getNdk().signer as { user?: () => Promise<{ pubkey?: string | undefined } | null | undefined> } | undefined
+  if (!signer?.user) return null
+
+  try {
+    const user = await signer.user()
+    const pubkey = user?.pubkey
+    if (!pubkey || pubkey.length !== 64) return null
+    return { pubkey, npub: nip19.npubEncode(pubkey) }
+  } catch {
+    return null
+  }
 }
 
 function normalizeTitle(title: string): string {
@@ -209,7 +223,7 @@ async function readManifestFromEntry(tree: SongsTree, rootCid: CID, songId: stri
 
 export function createSongsApi(deps: SongsDeps) {
   async function publishSong(input: PublishSongInput): Promise<PublishSongResult> {
-    const owner = deps.getOwner()
+    const owner = await deps.getOwner()
     if (!owner) throw new Error('Must be logged in to publish')
 
     const title = normalizeTitle(input.title)

@@ -4,7 +4,7 @@
   import type { MidiFile } from '$lib/midi'
   import { parseHashRoute, buildProfileRoute, type AppRoute } from '$lib/router'
   import { publishSong } from '$lib/songs'
-  import { nostrStore } from '$lib/nostr/store'
+  import { getNostrState, nostrStore } from '$lib/nostr/store'
   import { restoreOrBootstrapSession } from '$lib/nostr/auth'
   import DropZone from './components/DropZone.svelte'
   import EffectsPanel from './components/EffectsPanel.svelte'
@@ -166,6 +166,10 @@
     publishError = null
 
     try {
+      if (!getNostrState().pubkey) {
+        await restoreOrBootstrapSession()
+      }
+
       const result = await publishSong({
         title: shareName.trim() || defaultRecordName(fileName),
         sourceFileName: fileName || 'song.mid',
