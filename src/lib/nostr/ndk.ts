@@ -14,6 +14,8 @@ export const DEFAULT_RELAYS = [
   'wss://relay.snort.social',
 ]
 
+const CONNECT_WAIT_MS = 1500
+
 let ndkSingleton: NDK | null = null
 let connectPromise: Promise<void> | null = null
 
@@ -29,7 +31,11 @@ export function getNdk(): NDK {
 export function ensureNdkConnected(): Promise<void> {
   if (!connectPromise) {
     const ndk = getNdk()
-    connectPromise = Promise.resolve(ndk.connect()).then(() => undefined).catch(() => undefined)
+    const connectTask = Promise.resolve(ndk.connect()).then(() => undefined)
+    const timeoutTask = new Promise<void>((resolve) => {
+      setTimeout(resolve, CONNECT_WAIT_MS)
+    })
+    connectPromise = Promise.race([connectTask, timeoutTask]).catch(() => undefined)
   }
   return connectPromise
 }

@@ -77,18 +77,27 @@ function ensureValidNsec(nsec: string): string {
   return nsec
 }
 
+function connectInBackground(): void {
+  deps.ensureConnected().catch((e) => {
+    console.warn('[nostr/auth] relay connect failed:', e)
+  })
+}
+
 export async function loginWithExtension(): Promise<boolean> {
   try {
     const signer = deps.createNip07Signer()
     const user = await signer.user()
+    if (!user?.pubkey) throw new Error('Extension did not return pubkey')
+
     const ndk = deps.getNdk()
     ndk.signer = signer
-    await deps.ensureConnected()
 
     deps.storage()?.removeItem(STORAGE_NSEC)
     applySession(user.pubkey, 'extension')
+    connectInBackground()
     return true
-  } catch {
+  } catch (e) {
+    console.error('[nostr/auth] extension login failed:', e)
     return false
   }
 }
@@ -103,12 +112,13 @@ export async function loginWithNsec(nsec: string): Promise<boolean> {
     const signer = deps.createPrivateSigner(validNsec)
     const ndk = deps.getNdk()
     ndk.signer = signer
-    await deps.ensureConnected()
 
     setStoredNsec(validNsec)
     applySession(pubkey, 'nsec')
+    connectInBackground()
     return true
-  } catch {
+  } catch (e) {
+    console.error('[nostr/auth] nsec login failed:', e)
     return false
   }
 }
@@ -129,11 +139,12 @@ export async function switchToLocalAutologin(): Promise<boolean> {
     const signer = deps.createPrivateSigner(localNsec)
     const ndk = deps.getNdk()
     ndk.signer = signer
-    await deps.ensureConnected()
 
     applySession(pubkey, 'local')
+    connectInBackground()
     return true
-  } catch {
+  } catch (e) {
+    console.error('[nostr/auth] local autologin failed:', e)
     return false
   }
 }
