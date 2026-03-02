@@ -3,22 +3,31 @@ import { DexieStore } from '@hashtree/dexie'
 import { nhashEncode, nhashDecode, isNHash } from '@hashtree/core'
 import type { EnabledEffect } from './effects'
 
-const dexieStore = new DexieStore('midi-enshittifier')
+let treeSingleton: HashTree | null = null
+let blossomSingleton: BlossomStore | null = null
 
-const blossomStore = new BlossomStore({
-  servers: [
-    { url: 'https://cdn.iris.to', read: true, write: false },
-    { url: 'https://upload.iris.to', read: false, write: true },
-    { url: 'https://blossom.primal.net', read: true, write: true },
-  ],
-})
+function getSharingContext(): { tree: HashTree; blossomStore: BlossomStore } {
+  if (treeSingleton && blossomSingleton) {
+    return { tree: treeSingleton, blossomStore: blossomSingleton }
+  }
 
-const store = new FallbackStore({
-  primary: dexieStore,
-  fallbacks: [blossomStore],
-})
+  const dexieStore = new DexieStore('midi-enshittifier')
+  const blossomStore = new BlossomStore({
+    servers: [
+      { url: 'https://cdn.iris.to', read: true, write: false },
+      { url: 'https://upload.iris.to', read: false, write: true },
+      { url: 'https://blossom.primal.net', read: true, write: true },
+    ],
+  })
+  const store = new FallbackStore({
+    primary: dexieStore,
+    fallbacks: [blossomStore],
+  })
 
-const tree = new HashTree({ store })
+  treeSingleton = new HashTree({ store })
+  blossomSingleton = blossomStore
+  return { tree: treeSingleton, blossomStore: blossomStore }
+}
 
 export interface SharePayload {
   nhash: string
@@ -62,6 +71,7 @@ export async function shareMidi(
   config: ShareConfig,
   options?: { name?: string },
 ): Promise<SharePayload> {
+  const { tree, blossomStore } = getSharingContext()
   const original = await tree.putFile(data)
   const trimmedName = options?.name?.trim()
   const manifest: ShareManifestV1 = {
@@ -96,6 +106,7 @@ export async function loadShareFromNhash(
   nhash: string,
   fallbackConfig: ShareConfig | null,
 ): Promise<LoadedShare | null> {
+  const { tree } = getSharingContext()
   try {
     const cid = nhashDecode(nhash)
     const isDir = await tree.isDirectory(cid)
