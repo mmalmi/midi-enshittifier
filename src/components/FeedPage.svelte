@@ -1,25 +1,26 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { nip19 } from 'nostr-tools'
-  import Name from './Name.svelte'
   import { getNostrState } from '$lib/nostr/store'
   import { getFollowsForPubkey } from '$lib/nostr/follows'
   import { listUserSongs, type SongSummary } from '$lib/songs'
-  import { buildSongRoute } from '$lib/router'
-  import { formatRelativeTime } from '$lib/songPresentation'
+  import PublishedSongRow from './PublishedSongRow.svelte'
 
-  interface FeedItem extends SongSummary {
-    route: string
+  interface Props {
+    onPlaybackState?: (playing: boolean) => void
   }
+
+  let { onPlaybackState }: Props = $props()
 
   const DEFAULT_FEED_PUBKEYS = ['3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d']
 
-  let items = $state<FeedItem[]>([])
+  let items = $state<SongSummary[]>([])
   let loading = $state(true)
   let error = $state<string | null>(null)
+  let activePlaybackId = $state<string | null>(null)
 
-  function interleaveByOwner(rows: FeedItem[]): FeedItem[] {
-    const groups = new Map<string, FeedItem[]>()
+  function interleaveByOwner(rows: SongSummary[]): SongSummary[] {
+    const groups = new Map<string, SongSummary[]>()
     for (const item of rows) {
       const owner = item.ownerPubkey
       const list = groups.get(owner) ?? []
@@ -31,7 +32,7 @@
       list.sort((a, b) => b.createdAt - a.createdAt)
     }
 
-    const ordered: FeedItem[] = []
+    const ordered: SongSummary[] = []
     const keys = Array.from(groups.keys())
     let added = true
 
@@ -69,7 +70,7 @@
         for (const seed of DEFAULT_FEED_PUBKEYS) targets.add(seed)
       }
 
-      const rows: FeedItem[] = []
+      const rows: SongSummary[] = []
 
       await Promise.all(
         Array.from(targets).map(async (pubkey) => {
@@ -82,10 +83,7 @@
 
           const songs = await listUserSongs(npub)
           for (const song of songs) {
-            rows.push({
-              ...song,
-              route: buildSongRoute(song.ownerNpub, song.id),
-            })
+            rows.push(song)
           }
         }),
       )
@@ -102,6 +100,23 @@
   onMount(() => {
     void loadFeed()
   })
+
+  function handleActivatePlayback(id: string) {
+    activePlaybackId = id
+  }
+
+  function handleSongPlayback(id: string, playing: boolean) {
+    if (playing) {
+      activePlaybackId = id
+      onPlaybackState?.(true)
+      return
+    }
+
+    if (activePlaybackId === id) {
+      activePlaybackId = null
+      onPlaybackState?.(false)
+    }
+  }
 </script>
 
 <div class="space-y-3">
@@ -119,13 +134,13 @@
   {:else}
     <div class="grid gap-3">
       {#each items as item (item.ownerNpub + ':' + item.id)}
-        <a class="card no-underline text-white hover:border-primary" href={item.route}>
-          <div class="text-sm font-medium">{item.title}</div>
-          <div class="text-xs text-gray-400 mt-1">
-            <Name npub={item.ownerNpub} class="text-primary" />
-            · {item.effects.length} effects · seed {item.seed} · {formatRelativeTime(item.createdAt)}
-          </div>
-        </a>
+        <PublishedSongRow
+          song={item}
+          showOwner
+          {activePlaybackId}
+          onActivatePlayback={handleActivatePlayback}
+          onPlaybackState={handleSongPlayback}
+        />
       {/each}
     </div>
   {/if}

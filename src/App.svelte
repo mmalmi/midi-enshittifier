@@ -184,9 +184,9 @@
 </header>
 
 {#if route.type === 'feed'}
-  <FeedPage />
+  <FeedPage onPlaybackState={handlePlaybackState} />
 {:else if route.type === 'profile'}
-  <ProfilePage npub={route.npub} />
+  <ProfilePage npub={route.npub} onPlaybackState={handlePlaybackState} />
 {:else if route.type === 'song'}
   <SongPage
     npub={route.npub}
@@ -222,3 +222,14 @@
 
   <Recents {recents} onload={loadRecent} onremove={handleRemoveRecent} />
 {/if}
+
+<footer class="mt-8 pb-4 text-center text-xs text-gray-500">
+  <a
+    class="text-gray-400 no-underline transition-colors hover:text-primary"
+    href="https://files.iris.to/#/npub1xndmdgymsf4a34rzr7346vp8qcptxf75pjqweh8naa8rklgxpfqqmfjtce/midi-enshittifier"
+    target="_blank"
+    rel="noreferrer"
+  >
+    Source
+  </a>
+</footer>

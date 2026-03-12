@@ -2,20 +2,20 @@
   import type { NDKUserProfile } from '@nostr-dev-kit/ndk'
   import Avatar from './Avatar.svelte'
   import Name from './Name.svelte'
-  import { buildSongRoute } from '$lib/router'
   import { deleteSong, listUserSongs, type SongSummary } from '$lib/songs'
   import { getNostrState } from '$lib/nostr/store'
   import { followPubkey, getFollowsForPubkey, unfollowPubkey } from '$lib/nostr/follows'
   import { getFollowers } from '$lib/nostr/socialGraph'
   import { animalNameFromNpub, pubkeyFromNpub } from '$lib/animalName'
   import { fetchUserProfile, profileAbout, profileDisplayName } from '$lib/nostr/profiles'
-  import { formatRelativeTime } from '$lib/songPresentation'
+  import PublishedSongRow from './PublishedSongRow.svelte'
 
   interface Props {
     npub: string
+    onPlaybackState?: (playing: boolean) => void
   }
 
-  let { npub }: Props = $props()
+  let { npub, onPlaybackState }: Props = $props()
 
   let songs = $state<SongSummary[]>([])
   let loading = $state(true)
@@ -28,6 +28,7 @@
   let deleteError = $state<string | null>(null)
   let profile = $state<NDKUserProfile | null>(null)
   let refreshRequest = 0
+  let activePlaybackId = $state<string | null>(null)
 
   let myNpub = $derived(getNostrState().npub)
   let isOwn = $derived(myNpub === npub)
@@ -133,6 +134,23 @@
     npub
     void refresh()
   })
+
+  function handleActivatePlayback(id: string) {
+    activePlaybackId = id
+  }
+
+  function handleSongPlayback(id: string, playing: boolean) {
+    if (playing) {
+      activePlaybackId = id
+      onPlaybackState?.(true)
+      return
+    }
+
+    if (activePlaybackId === id) {
+      activePlaybackId = null
+      onPlaybackState?.(false)
+    }
+  }
 </script>
 
 <div class="space-y-4">
@@ -181,22 +199,15 @@
   {:else}
     <div class="grid gap-3">
       {#each songs as song (song.id)}
-        <div class="card group flex items-start justify-between gap-3 hover:border-primary">
-          <a class="min-w-0 flex-1 no-underline text-white" href={buildSongRoute(npub, song.id)}>
-            <div class="text-sm font-medium">{song.title}</div>
-            <div class="text-xs text-gray-400 mt-1">{song.effects.length} effects · seed {song.seed} · {formatRelativeTime(song.createdAt)}</div>
-          </a>
-
-          {#if isOwn}
-            <button
-              class="btn-ghost px-3 py-1 text-xs text-red-300 hover:text-red-200"
-              onclick={() => handleDeleteSong(song)}
-              disabled={deleteBusySongId !== null}
-            >
-              {deleteBusySongId === song.id ? 'Deleting...' : 'Delete'}
-            </button>
-          {/if}
-        </div>
+        <PublishedSongRow
+          {song}
+          showDelete={isOwn}
+          deleteBusy={deleteBusySongId !== null}
+          {activePlaybackId}
+          onActivatePlayback={handleActivatePlayback}
+          onPlaybackState={handleSongPlayback}
+          onDelete={handleDeleteSong}
+        />
       {/each}
     </div>
   {/if}

@@ -21,12 +21,16 @@ test('published song is visible from a second browser context', async ({ browser
 
   await expect(publisherPage).toHaveURL(/#\/u\/npub1/, { timeout: 15_000 })
   await expect(publisherPage.getByText(title)).toBeVisible({ timeout: 15_000 })
+  await expect(publisherPage.getByRole('button', { name: `Play original ${title}` })).toBeVisible()
+  await expect(publisherPage.getByRole('button', { name: `Play enshittified ${title}` })).toBeVisible()
 
   const publishedProfileUrl = publisherPage.url()
 
   const viewerPage = await viewerContext.newPage()
   await viewerPage.goto(publishedProfileUrl)
   await expect(viewerPage.getByText(title)).toBeVisible({ timeout: 15_000 })
+  await expect(viewerPage.getByRole('button', { name: `Play original ${title}` })).toBeVisible()
+  await expect(viewerPage.getByRole('button', { name: `Play enshittified ${title}` })).toBeVisible()
 
   await publisherContext.close()
   await viewerContext.close()
