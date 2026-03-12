@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import { nip19 } from 'nostr-tools'
-  import { getNostrState } from '$lib/nostr/store'
+  import { getNostrState, nostrStore } from '$lib/nostr/store'
   import { getFollowsForPubkey } from '$lib/nostr/follows'
   import { listUserSongs, type SongSummary } from '$lib/songs'
   import PublishedSongRow from './PublishedSongRow.svelte'
@@ -18,6 +17,9 @@
   let loading = $state(true)
   let error = $state<string | null>(null)
   let activePlaybackId = $state<string | null>(null)
+  let refreshRequest = 0
+
+  let currentPubkey = $derived($nostrStore.pubkey)
 
   function interleaveByOwner(rows: SongSummary[]): SongSummary[] {
     const groups = new Map<string, SongSummary[]>()
@@ -52,12 +54,14 @@
   }
 
   async function loadFeed() {
+    const requestId = ++refreshRequest
     loading = true
     error = null
 
     try {
       const state = getNostrState()
       if (!state.pubkey) {
+        if (requestId !== refreshRequest) return
         items = []
         loading = false
         return
@@ -88,16 +92,20 @@
         }),
       )
 
+      if (requestId !== refreshRequest) return
       items = interleaveByOwner(rows)
     } catch (e) {
+      if (requestId !== refreshRequest) return
       error = e instanceof Error ? e.message : 'Failed to load feed'
       items = []
     } finally {
+      if (requestId !== refreshRequest) return
       loading = false
     }
   }
 
-  onMount(() => {
+  $effect(() => {
+    currentPubkey
     void loadFeed()
   })
 
@@ -119,7 +127,7 @@
   }
 </script>
 
-<div class="space-y-3">
+<div class="space-y-3" data-testid="feed-section">
   <div class="flex items-center justify-between">
     <h2 class="text-xl font-semibold">Feed</h2>
     <button class="btn-ghost px-3 py-1 text-xs" onclick={loadFeed} disabled={loading}>Refresh</button>

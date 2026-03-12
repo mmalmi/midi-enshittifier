@@ -6,7 +6,7 @@
   import { buildProfileRoute } from '$lib/router'
   import type { EnabledEffect } from '$lib/effects'
   import type { RecentShare } from '$lib/recents'
-  import { formatRelativeTime } from '$lib/songPresentation'
+  import { formatRelativeTime, trackInfo } from '$lib/songPresentation'
   import Name from './Name.svelte'
   import SongWorkbench from './SongWorkbench.svelte'
   import {
@@ -170,6 +170,8 @@
     <div class="card">
       <div class="text-xl font-semibold">{title}</div>
       <div class="text-xs text-gray-400 mt-1">{effectsCount} effects · seed {publishedSeed}</div>
+      <div class="mt-3 text-sm font-medium text-white/90 truncate">{fileName || `${songId}.mid`}</div>
+      <div class="mt-1 text-xs text-gray-500">{trackInfo(originalMidi)}</div>
 
       <div class="mt-3 flex flex-wrap gap-2 text-xs">
         <a class="btn-ghost px-3 py-1 no-underline text-white" href={buildProfileRoute(npub)}>Profile</a>
@@ -190,6 +192,7 @@
       bind:shareName={editorShareName}
       bind:enshittifiedMidi
       bind:lastSeed={editorSeed}
+      showFileCard={false}
       onRecentsChanged={onRecentsChanged}
       {onPlaybackState}
     />

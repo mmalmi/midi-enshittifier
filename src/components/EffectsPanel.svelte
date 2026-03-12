@@ -50,19 +50,19 @@
   }
 </script>
 
-<div class="space-y-2">
-  <div class="flex items-center justify-between mb-2">
-    <h2 class="text-sm font-bold text-gray-400 uppercase tracking-wider">
+<div class="space-y-3">
+  <div class="mb-2 flex items-center justify-between gap-3">
+    <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300">
       Effects
     </h2>
-    <div class="flex gap-2">
-      <button class="text-xs text-gray-500 hover:text-primary" onclick={randomize}>
+    <div class="flex flex-wrap gap-2">
+      <button class="btn-ghost px-2.5 py-1 text-xs" onclick={randomize}>
         🎲 random
       </button>
-      <button class="text-xs text-gray-500 hover:text-primary" onclick={enableAll}>
+      <button class="btn-ghost px-2.5 py-1 text-xs" onclick={enableAll}>
         all
       </button>
-      <button class="text-xs text-gray-500 hover:text-primary" onclick={disableAll}>
+      <button class="btn-ghost px-2.5 py-1 text-xs" onclick={disableAll}>
         none
       </button>
     </div>

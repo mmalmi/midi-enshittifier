@@ -20,6 +20,8 @@ test('recents flow works', async ({ page, context }) => {
   await expect(page.getByText('Drop a MIDI file here')).toBeVisible()
 
   await page.locator('[data-testid="recents"] button').first().click()
-  await expect(page.getByText('test.mid')).toBeVisible({ timeout: 10_000 })
+  await expect(
+    page.locator('.card').filter({ has: page.getByRole('button', { name: 'change' }) }).first(),
+  ).toContainText('test.mid', { timeout: 10_000 })
   await expect(page.getByTestId('download-btn')).toBeVisible()
 })

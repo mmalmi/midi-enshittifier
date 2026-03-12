@@ -18,6 +18,7 @@
     shareName?: string
     enshittifiedMidi?: MidiFile | null
     lastSeed?: number | null
+    showFileCard?: boolean
     allowReset?: boolean
     onReset?: () => void
     onPlaybackState?: (playing: boolean) => void
@@ -31,6 +32,7 @@
     shareName = $bindable(''),
     enshittifiedMidi = $bindable<MidiFile | null>(null),
     lastSeed = $bindable<number | null>(null),
+    showFileCard = true,
     allowReset = false,
     onReset,
     onPlaybackState,
@@ -121,16 +123,26 @@
   }
 </script>
 
-<div class="card mb-4 flex items-center justify-between">
-  <div>
-    <div class="text-sm font-medium truncate">{fileName}</div>
-    <div class="text-xs text-gray-500">{trackInfo(originalMidi)}</div>
+{#if showFileCard}
+  <div class="card mb-4 flex items-center justify-between">
+    <div>
+      <div class="text-sm font-medium truncate">{fileName}</div>
+      <div class="text-xs text-gray-500">{trackInfo(originalMidi)}</div>
+    </div>
+    {#if allowReset && onReset}
+      <button class="text-xs text-gray-500 hover:text-primary" onclick={() => onReset()}>
+        change
+      </button>
+    {/if}
   </div>
-  {#if allowReset && onReset}
-    <button class="text-xs text-gray-500 hover:text-primary" onclick={() => onReset()}>
-      change
-    </button>
-  {/if}
+{/if}
+
+<div class="mb-4">
+  <Player
+    original={originalMidi}
+    enshittified={enshittifiedMidi}
+    {onPlaybackState}
+  />
 </div>
 
 <div class="flex gap-2 mb-4">
@@ -154,30 +166,36 @@
   {/if}
 </div>
 
-<div class="mb-4">
+<div class="mb-4 overflow-hidden rounded-2xl border border-surface-lighter bg-surface">
   <button
-    class="text-xs text-gray-500 hover:text-primary flex items-center gap-1 mb-2"
+    class="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-surface-light"
     onclick={() => (showAdvanced = !showAdvanced)}
     data-testid="advanced-toggle"
+    aria-expanded={showAdvanced}
   >
-    <span
-      class="inline-block transition-transform duration-150"
-      class:rotate-90={showAdvanced}
-    >&#9654;</span>
-    Advanced
-    <span class="text-gray-600">({enabled.length}/{effects.length} effects)</span>
+    <div class="flex min-w-0 items-center gap-3">
+      <div
+        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-surface-lighter bg-surface-light text-sm text-white transition-transform duration-150"
+        class:rotate-90={showAdvanced}
+      >
+        &#9654;
+      </div>
+      <div class="min-w-0">
+        <div class="text-sm font-semibold text-white">Effect Stack</div>
+        <div class="text-xs text-gray-400">
+          Show, hide, and tune the MIDI damage.
+        </div>
+      </div>
+    </div>
+    <div class="shrink-0 rounded-full border border-primary-op30 bg-primary-op10 px-3 py-1 text-xs font-medium text-white">
+      {enabled.length}/{effects.length} active
+    </div>
   </button>
   {#if showAdvanced}
-    <EffectsPanel {effects} bind:enabled />
+    <div class="border-t border-surface-lighter px-3 py-3">
+      <EffectsPanel {effects} bind:enabled />
+    </div>
   {/if}
-</div>
-
-<div class="mb-4">
-  <Player
-    original={originalMidi}
-    enshittified={enshittifiedMidi}
-    {onPlaybackState}
-  />
 </div>
 
 {#if enshittifiedMidi}

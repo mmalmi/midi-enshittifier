@@ -145,9 +145,24 @@
       stop()
     }
   })
+
+  function seekToRatio(ratio: number) {
+    if (!which || duration <= 0) return
+    const nextTime = Math.max(0, Math.min(duration, duration * ratio))
+    currentTime = nextTime
+    player.seek(nextTime)
+  }
 </script>
 
-<ListRow href={route} playbackActive={playing} playbackLoading={loadingAudio} playbackProgress={playbackProgress}>
+<ListRow
+  href={route}
+  showPlaybackTrack={playing}
+  playbackActive={playing}
+  playbackLoading={loadingAudio}
+  playbackProgress={playbackProgress}
+  playbackInteractive={Boolean(which) && duration > 0}
+  onPlaybackSeek={seekToRatio}
+>
   {#snippet body()}
     <div class="min-w-0">
       <div class="truncate text-sm font-medium">{song.title}</div>

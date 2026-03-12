@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { parseMidi } from '$lib/midi'
   import type { MidiFile } from '$lib/midi'
-  import { parseHashRoute, buildProfileRoute, type AppRoute } from '$lib/router'
-  import { nostrStore } from '$lib/nostr/store'
+  import { parseHashRoute, type AppRoute } from '$lib/router'
   import { restoreOrBootstrapSession } from '$lib/nostr/auth'
   import DropZone from './components/DropZone.svelte'
   import FeedPage from './components/FeedPage.svelte'
@@ -37,8 +36,7 @@
   let loadingShared = $state(false)
   let loadError = $state<string | null>(null)
   let isPlaying = $state(false)
-
-  let currentNpub = $derived($nostrStore.npub)
+  let feedSectionEl = $state<HTMLElement | null>(null)
 
   async function loadLegacyShareFromHash() {
     const { nhash, config: legacyConfig } = parseUrlHash()
@@ -148,8 +146,16 @@
   }
 
   function isHomeLike(current: AppRoute): boolean {
-    return current.type === 'home' || current.type === 'legacy-share' || current.type === 'unknown'
+    return current.type === 'home' || current.type === 'feed' || current.type === 'legacy-share' || current.type === 'unknown'
   }
+
+  $effect(() => {
+    if (route.type !== 'feed') return
+
+    void tick().then(() => {
+      feedSectionEl?.scrollIntoView({ block: 'start' })
+    })
+  })
 </script>
 
 <header class="card mb-4 flex flex-col items-center gap-4 text-center">
@@ -171,11 +177,27 @@
 
   <div class="flex w-full flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-between">
     <nav class="flex flex-wrap items-center justify-center gap-2 text-sm">
-      <a class="btn-ghost px-3 py-1 no-underline text-white" href="#/">Home</a>
-      <a class="btn-ghost px-3 py-1 no-underline text-white" href="#/feed">Feed</a>
-      {#if currentNpub}
-        <a class="btn-ghost px-3 py-1 no-underline text-white" href={buildProfileRoute(currentNpub)}>Profile</a>
-      {/if}
+      <a
+        class="btn-ghost group px-3 py-2 no-underline text-white transition-transform duration-150 hover:translate-x-0.5 hover:rotate-4 hover:skew-x-6"
+        href="#/"
+        aria-label="Home"
+        title="Home"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="h-4 w-4 transition-transform duration-150 group-hover:-rotate-8"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.9"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3.5 10.5 12 4l8.5 6.5" />
+          <path d="M6.5 9.5V20h11V9.5" />
+          <path d="M10 20v-5h4v5" />
+        </svg>
+      </a>
     </nav>
     <div class="flex w-full justify-center sm:w-auto sm:justify-end">
       <NostrAuth />
@@ -183,9 +205,7 @@
   </div>
 </header>
 
-{#if route.type === 'feed'}
-  <FeedPage onPlaybackState={handlePlaybackState} />
-{:else if route.type === 'profile'}
+{#if route.type === 'profile'}
   <ProfilePage npub={route.npub} onPlaybackState={handlePlaybackState} />
 {:else if route.type === 'song'}
   <SongPage
@@ -220,7 +240,13 @@
     />
   {/if}
 
-  <Recents {recents} onload={loadRecent} onremove={handleRemoveRecent} />
+  <div class="space-y-6">
+    <Recents {recents} onload={loadRecent} onremove={handleRemoveRecent} />
+
+    <div bind:this={feedSectionEl}>
+      <FeedPage onPlaybackState={handlePlaybackState} />
+    </div>
+  </div>
 {/if}
 
 <footer class="mt-8 pb-4 text-center text-xs text-gray-500">
