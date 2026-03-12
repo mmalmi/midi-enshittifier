@@ -58,6 +58,7 @@ interface SongsTree {
     type?: LinkType,
     meta?: Record<string, unknown>,
   ): Promise<CID>
+  removeEntry(root: CID, path: string[], name: string): Promise<CID>
   isDirectory(id: CID): Promise<boolean>
   listDirectory(id: CID): Promise<TreeEntry[]>
   resolvePath(root: CID, path: string): Promise<{ cid: CID; type: LinkType } | null>
@@ -359,10 +360,45 @@ export function createSongsApi(deps: SongsDeps) {
     }
   }
 
+  async function deleteSong(songId: string): Promise<boolean> {
+    const owner = await deps.getOwner()
+    if (!owner) throw new Error('Must be logged in to delete')
+
+    const key = resolverKeyForSongs(owner.npub)
+    const rootCid = await resolveRootOrNull(deps.resolver, key)
+    if (!rootCid) return false
+    if (!(await deps.tree.isDirectory(rootCid))) return false
+
+    const existingEntry = await deps.tree.resolvePath(rootCid, songId)
+    if (!existingEntry || existingEntry.type !== LinkType.Dir) return false
+
+    const nextRoot = await deps.tree.removeEntry(rootCid, [], songId)
+
+    if (!deps.resolver.publish) {
+      throw new Error('Resolver publish is not available')
+    }
+
+    const result = await deps.resolver.publish(key, nextRoot, {
+      visibility: 'public',
+      labels: ['songs'],
+    })
+
+    if (!result.success) {
+      throw new Error('Failed to publish songs root')
+    }
+
+    if (deps.tree.push && deps.pushTarget) {
+      deps.tree.push(nextRoot, deps.pushTarget).catch(() => {})
+    }
+
+    return true
+  }
+
   return {
     publishSong,
     listUserSongs,
     loadSong,
+    deleteSong,
   }
 }
 
@@ -381,3 +417,4 @@ const defaultApi = (() => {
 export const publishSong = defaultApi.publishSong
 export const listUserSongs = defaultApi.listUserSongs
 export const loadSong = defaultApi.loadSong
+export const deleteSong = defaultApi.deleteSong

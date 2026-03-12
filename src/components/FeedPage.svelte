@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { nip19 } from 'nostr-tools'
+  import Name from './Name.svelte'
   import { getNostrState } from '$lib/nostr/store'
   import { getFollowsForPubkey } from '$lib/nostr/follows'
   import { listUserSongs, type SongSummary } from '$lib/songs'
   import { buildSongRoute } from '$lib/router'
-  import { animalNameFromNpub } from '$lib/animalName'
 
   interface FeedItem extends SongSummary {
     route: string
@@ -132,7 +132,7 @@
         <a class="card no-underline text-white hover:border-primary" href={item.route}>
           <div class="text-sm font-medium">{item.title}</div>
           <div class="text-xs text-gray-400 mt-1">
-            <span class="text-primary">{animalNameFromNpub(item.ownerNpub)}</span>
+            <Name npub={item.ownerNpub} class="text-primary" />
             · {item.effects.length} effects · seed {item.seed} · {relTime(item.createdAt)}
           </div>
         </a>

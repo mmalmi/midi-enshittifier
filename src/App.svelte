@@ -37,7 +37,6 @@
   let shareName = $state('')
   let lastSeed = $state<number | null>(null)
   let copied = $state(false)
-  let publishCopied = $state(false)
   let publishing = $state(false)
   let publishError = $state<string | null>(null)
   let showAdvanced = $state(false)
@@ -179,10 +178,7 @@
         effects: enabled,
       })
 
-      const absoluteUrl = `${location.origin}${location.pathname}${result.route}`
-      await navigator.clipboard.writeText(absoluteUrl)
-      publishCopied = true
-      setTimeout(() => (publishCopied = false), 2000)
+      location.hash = buildProfileRoute(result.ownerNpub).slice(1)
     } catch (e) {
       publishError = e instanceof Error ? e.message : 'Publishing failed'
     } finally {
@@ -375,7 +371,7 @@
       </div>
       <div class="flex gap-2 mt-2">
         <button class="btn-primary flex-1" onclick={publishCurrent} disabled={publishing}>
-          {publishing ? 'Publishing...' : publishCopied ? 'Published + Copied' : 'Publish'}
+          {publishing ? 'Publishing...' : 'Publish'}
         </button>
       </div>
       {#if publishError}

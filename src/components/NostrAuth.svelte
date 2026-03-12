@@ -1,6 +1,10 @@
 <script lang="ts">
+  import type { NDKUserProfile } from '@nostr-dev-kit/ndk'
+  import Avatar from './Avatar.svelte'
+  import Name from './Name.svelte'
   import { buildProfileRoute } from '$lib/router'
   import { animalNameFromPubkey } from '$lib/animalName'
+  import { fetchUserProfile, profileDisplayName } from '$lib/nostr/profiles'
   import { nostrStore } from '$lib/nostr/store'
   import {
     loginWithExtension,
@@ -13,6 +17,8 @@
   let nsecInput = $state('')
   let busy = $state(false)
   let error = $state<string | null>(null)
+  let profile = $state<NDKUserProfile | null>(null)
+  let profileRequest = 0
 
   let isLoggedIn = $derived($nostrStore.isLoggedIn)
   let npub = $derived($nostrStore.npub)
@@ -24,23 +30,22 @@
     return `${value.slice(0, 10)}...${value.slice(-6)}`
   }
 
-  let displayName = $derived(animalNameFromPubkey(pubkey))
+  let displayName = $derived(profileDisplayName(profile, animalNameFromPubkey(pubkey)))
 
-  function avatarSeed(value: string | null): { text: string; hue: number } {
-    if (!value) return { text: '?', hue: 200 }
+  $effect(() => {
+    const currentPubkey = pubkey
+    const requestId = ++profileRequest
 
-    let hash = 0
-    for (let i = 0; i < value.length; i++) {
-      hash = (hash * 31 + value.charCodeAt(i)) % 360
+    if (!currentPubkey) {
+      profile = null
+      return
     }
 
-    return {
-      text: value.slice(0, 2).toUpperCase(),
-      hue: hash,
-    }
-  }
-
-  let avatar = $derived(avatarSeed(pubkey))
+    void fetchUserProfile(currentPubkey).then((nextProfile) => {
+      if (requestId !== profileRequest) return
+      profile = nextProfile
+    })
+  })
 
   async function doExtensionLogin() {
     busy = true
@@ -83,18 +88,19 @@
 
 <div class="flex items-center gap-2 text-xs">
   {#if isLoggedIn}
-    {#if npub}
+    {#if npub && pubkey}
       <a class="no-underline" href={buildProfileRoute(npub)} title="Open profile">
-        <span
-          class="inline-flex h-7 w-7 items-center justify-center rounded-full text-white text-[10px] font-semibold"
-          style={`background: hsl(${avatar.hue} 68% 42%); border: 1px solid hsla(${avatar.hue} 68% 62% / 0.45);`}
-        >
-          {avatar.text}
-        </span>
+        <Avatar
+          pubkey={pubkey}
+          {profile}
+          size={28}
+          title={displayName}
+          wrapperClass="border border-surface-lighter shadow-sm"
+        />
       </a>
     {/if}
     <span class="text-gray-400">{loginType}</span>
-    <span class="text-gray-300">{displayName}</span>
+    <Name {pubkey} {profile} class="text-gray-300" />
     <span class="text-gray-500">{shortNpub(npub)}</span>
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doExtensionLogin}>Ext</button>
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={() => (showNsec = !showNsec)}>Nsec</button>

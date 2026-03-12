@@ -20,6 +20,9 @@ importers:
       '@nostr-dev-kit/ndk':
         specifier: ^3.0.3
         version: 3.0.3(nostr-tools@2.23.3(typescript@5.9.3))
+      minidenticons:
+        specifier: ^4.2.1
+        version: 4.2.1
       nostr-social-graph:
         specifier: ^1.0.33
         version: 1.0.33
@@ -903,6 +906,10 @@ packages:
   mime-db@1.54.0:
     resolution: {integrity: sha512-aU5EJuIN2WDemCcAp2vFBfp/m4EAhWJnUNSSw0ixs7/kXbd6Pg64EmwJkNdFhB8aWt1sH2CTXrLxo/iAGV3oPQ==}
     engines: {node: '>= 0.6'}
+
+  minidenticons@4.2.1:
+    resolution: {integrity: sha512-oWfFivA0lOx/V/bO/YIJbthB26lV8JXYvhnv9zM2hNd3fzsHTXQ6c6bWZPcvhD3nnOB+lQk/D9lF43BXixrN8g==}
+    engines: {node: '>=15.14.0'}
 
   mlly@1.8.0:
     resolution: {integrity: sha512-l8D9ODSRWLe2KHJSifWGwBqpTZXIXTeo8mlKjY+E2HAakaTeNpqAyBZ8GSqLzHgw4XmHmC8whvpjJNMbFZN7/g==}
@@ -2111,6 +2118,8 @@ snapshots:
   midimessage@1.0.5: {}
 
   mime-db@1.54.0: {}
+
+  minidenticons@4.2.1: {}
 
   mlly@1.8.0:
     dependencies:

@@ -3,6 +3,7 @@
   import { parseMidi, writeMidi, type MidiFile } from '$lib/midi'
   import { loadSong } from '$lib/songs'
   import { buildProfileRoute } from '$lib/router'
+  import Name from './Name.svelte'
   import Player from './Player.svelte'
   import {
     publishComment,
@@ -13,7 +14,6 @@
   } from '$lib/interactions'
   import { getNostrState } from '$lib/nostr/store'
   import { followPubkey, getFollowsForPubkey, unfollowPubkey } from '$lib/nostr/follows'
-  import { animalNameFromPubkey } from '$lib/animalName'
 
   interface Props {
     npub: string
@@ -208,7 +208,7 @@
         <div class="space-y-2">
           {#each comments as comment (comment.id)}
             <div class="rounded-lg bg-surface p-2">
-              <div class="text-xs text-gray-400">{animalNameFromPubkey(comment.pubkey)} · {relTime(comment.createdAt)}</div>
+              <div class="text-xs text-gray-400"><Name pubkey={comment.pubkey} /> · {relTime(comment.createdAt)}</div>
               <div class="text-sm mt-1">{comment.content}</div>
             </div>
           {/each}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HashTree, LinkType, MemoryStore, type CID, type PublishResult, type RefResolver } from '@hashtree/core'
+import { HashTree, MemoryStore, type CID, type PublishResult, type RefResolver } from '@hashtree/core'
 import { createSongsApi, parseSongManifest } from './songs'
 
 function createTestSongsApi() {
@@ -81,6 +81,58 @@ describe('songs api', () => {
     const second = await api.loadSong('npub1owner', 'song-2')
     expect(first?.manifest.title).toBe('First')
     expect(second?.manifest.title).toBe('Second')
+  })
+
+  it('deletes a published song from the owner root', async () => {
+    const { api } = createTestSongsApi()
+
+    await api.publishSong({
+      title: 'First',
+      sourceFileName: 'first.mid',
+      originalData: new Uint8Array([1]),
+      enshittifiedData: new Uint8Array([2]),
+      seed: 1,
+      effects: [{ id: 'a', intensity: 1 }],
+    })
+
+    await api.publishSong({
+      title: 'Second',
+      sourceFileName: 'second.mid',
+      originalData: new Uint8Array([3]),
+      enshittifiedData: new Uint8Array([4]),
+      seed: 2,
+      effects: [{ id: 'b', intensity: 0.5 }],
+    })
+
+    await expect(api.deleteSong('song-1')).resolves.toBe(true)
+
+    const list = await api.listUserSongs('npub1owner')
+    expect(list.map((song) => song.id)).toEqual(['song-2'])
+    await expect(api.loadSong('npub1owner', 'song-1')).resolves.toBeNull()
+    expect((await api.loadSong('npub1owner', 'song-2'))?.manifest.title).toBe('Second')
+  })
+
+  it('keeps an empty songs root after deleting the last song', async () => {
+    const { api } = createTestSongsApi()
+
+    await api.publishSong({
+      title: 'Solo',
+      sourceFileName: 'solo.mid',
+      originalData: new Uint8Array([1]),
+      enshittifiedData: new Uint8Array([2]),
+      seed: 3,
+      effects: [{ id: 'solo', intensity: 0.9 }],
+    })
+
+    await expect(api.deleteSong('song-1')).resolves.toBe(true)
+    await expect(api.listUserSongs('npub1owner')).resolves.toEqual([])
+    await expect(api.loadSong('npub1owner', 'song-1')).resolves.toBeNull()
+  })
+
+  it('returns false when deleting a missing song', async () => {
+    const { api } = createTestSongsApi()
+
+    await expect(api.deleteSong('song-404')).resolves.toBe(false)
   })
 
   it('validates and parses song manifests deterministically', () => {
