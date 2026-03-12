@@ -168,7 +168,7 @@
 
 <div class="mb-4 overflow-hidden rounded-2xl border border-surface-lighter bg-surface">
   <button
-    class="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-all duration-150 hover:bg-surface-light"
+    class="flex w-full items-center justify-between gap-4 border-none bg-transparent px-4 py-3 text-left transition-all duration-150 hover:bg-surface-light"
     onclick={() => (showAdvanced = !showAdvanced)}
     data-testid="advanced-toggle"
     aria-expanded={showAdvanced}
