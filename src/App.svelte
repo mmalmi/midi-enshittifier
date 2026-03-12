@@ -152,20 +152,20 @@
   }
 </script>
 
-<header class="card mb-4 flex flex-wrap items-center justify-between gap-3">
-  <a class="flex min-w-0 items-center gap-3 no-underline text-white" href="#/">
+<header class="card mb-4 flex flex-wrap items-center justify-between gap-4">
+  <a class="flex min-w-0 items-center gap-4 no-underline text-white" href="#/">
     <JamLogo
       src={appLogo}
       alt="Pepe listening to music"
       playing={isPlaying}
-      size={44}
+      size={96}
       inline
     />
     <div class="min-w-0">
-      <div class="text-lg font-bold leading-tight">
+      <div class="text-2xl font-bold leading-tight">
         <span class="text-primary">MIDI</span> Enshittifier
       </div>
-      <div class="text-xs text-gray-500">make any MIDI file objectively worse</div>
+      <div class="text-sm text-gray-500">make any MIDI file objectively worse</div>
     </div>
   </a>
 
