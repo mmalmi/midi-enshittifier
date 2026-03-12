@@ -27,7 +27,7 @@ test('profile song order can be reordered and persists after reload', async ({ p
   await expect(rows.first()).toContainText(secondTitle)
   await expect(rows.nth(1)).toContainText(firstTitle)
 
-  await rows.nth(1).dragTo(rows.first(), { targetPosition: { x: 32, y: 4 } })
+  await rows.nth(1).locator('a').dragTo(rows.first(), { targetPosition: { x: 32, y: 4 } })
 
   await expect(rows.first()).toContainText(firstTitle, { timeout: 10_000 })
   await expect(rows.nth(1)).toContainText(secondTitle)

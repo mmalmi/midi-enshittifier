@@ -4,6 +4,34 @@ import type { Effect } from './types'
 
 // ── Effects ──────────────────────────────────────────────
 
+function clampMidi(n: number): number {
+  return Math.max(0, Math.min(127, n))
+}
+
+type Phrase = MidiTrack['notes']
+
+function phraseGroups(track: MidiTrack): Phrase[] {
+  const sorted = [...track.notes].sort((a, b) => a.time - b.time || a.midi - b.midi)
+  const groups: Phrase[] = []
+  let current: Phrase = []
+  let prevEnd = -1
+
+  for (const note of sorted) {
+    if (current.length === 0 || note.time - prevEnd <= 0.22) {
+      current.push(note)
+      prevEnd = Math.max(prevEnd, note.time + note.duration)
+      continue
+    }
+
+    groups.push(current)
+    current = [note]
+    prevEnd = note.time + note.duration
+  }
+
+  if (current.length) groups.push(current)
+  return groups
+}
+
 export const drunkNotes: Effect = {
   id: 'drunkNotes',
   name: 'Drunk Musician',
@@ -16,7 +44,7 @@ export const drunkNotes: Effect = {
       for (const note of track.notes) {
         if (rng() < intensity * 0.3) {
           const shift = Math.floor(rng() * 5) - 2 // -2 to +2
-          note.midi = Math.max(0, Math.min(127, note.midi + shift))
+          note.midi = clampMidi(note.midi + shift)
         }
       }
     }
@@ -273,6 +301,53 @@ export const echoChamber: Effect = {
   },
 }
 
+export const octaveOops: Effect = {
+  id: 'octaveOops',
+  name: 'Octave Oops',
+  description: 'Sudden register jumps and doubled octaves',
+  emoji: '🪜',
+  defaultIntensity: 0.4,
+  apply(midi, intensity, rng) {
+    const phraseChance = 0.12 + intensity * 0.58
+    const duplicateChance = 0.18 + intensity * 0.5
+
+    for (const track of midi.tracks) {
+      if (track.channel === 9 || track.notes.length === 0) continue
+
+      for (const phrase of phraseGroups(track)) {
+        if (rng() >= phraseChance) continue
+
+        const avgPitch = phrase.reduce((sum, note) => sum + note.midi, 0) / phrase.length
+        const duplicate = rng() < duplicateChance
+        const directionRoll = rng()
+        const direction =
+          avgPitch <= 47
+            ? directionRoll < 0.88 ? 1 : -1
+            : avgPitch >= 79
+              ? directionRoll < 0.88 ? -1 : 1
+              : directionRoll < 0.5 ? 1 : -1
+        const shift = direction * 12
+
+        if (duplicate) {
+          for (const note of phrase) {
+            addNote(track, {
+              midi: clampMidi(note.midi + shift),
+              time: note.time,
+              duration: note.duration,
+              velocity: Math.max(0.08, Math.min(1, note.velocity * (0.55 + rng() * 0.25))),
+            })
+          }
+          continue
+        }
+
+        for (const note of phrase) {
+          note.midi = clampMidi(note.midi + shift)
+        }
+      }
+    }
+  },
+}
+
 export const moodSwing: Effect = {
   id: 'moodSwing',
   name: 'Mood Swing',
@@ -441,10 +516,6 @@ export const melodyHijack: Effect = {
       114, // Steel Drums
     ]
 
-    function clampMidi(n: number): number {
-      return Math.max(0, Math.min(127, n))
-    }
-
     const usedChannels = new Set(midi.tracks.map((t) => t.channel))
     function allocChannel(): number {
       for (let c = 0; c < 16; c++) {
@@ -516,4 +587,3 @@ export const melodyHijack: Effect = {
     }
   },
 }
-

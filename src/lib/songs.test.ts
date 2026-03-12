@@ -112,6 +112,41 @@ describe('songs api', () => {
     expect((await api.loadSong('npub1owner', 'song-2'))?.manifest.title).toBe('Second')
   })
 
+  it('updates a published song title without changing its id or order', async () => {
+    const { api } = createTestSongsApi()
+
+    await api.publishSong({
+      title: 'First',
+      sourceFileName: 'first.mid',
+      originalData: new Uint8Array([1]),
+      enshittifiedData: new Uint8Array([2]),
+      seed: 1,
+      effects: [{ id: 'a', intensity: 1 }],
+    })
+
+    await api.publishSong({
+      title: 'Second',
+      sourceFileName: 'second.mid',
+      originalData: new Uint8Array([3]),
+      enshittifiedData: new Uint8Array([4]),
+      seed: 2,
+      effects: [{ id: 'b', intensity: 0.5 }],
+    })
+
+    const updated = await api.updateSongTitle('song-1', 'Renamed First')
+    expect(updated?.id).toBe('song-1')
+    expect(updated?.title).toBe('Renamed First')
+
+    const list = await api.listUserSongs('npub1owner')
+    expect(list.map((song) => song.id)).toEqual(['song-2', 'song-1'])
+    expect(list.map((song) => song.title)).toEqual(['Second', 'Renamed First'])
+
+    const loaded = await api.loadSong('npub1owner', 'song-1')
+    expect(loaded?.manifest.title).toBe('Renamed First')
+    expect(Array.from(loaded?.original ?? [])).toEqual([1])
+    expect(Array.from(loaded?.enshittified ?? [])).toEqual([2])
+  })
+
   it('persists a manual song order', async () => {
     const { api } = createTestSongsApi()
 

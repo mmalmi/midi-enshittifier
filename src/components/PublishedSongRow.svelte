@@ -6,6 +6,7 @@
   import { buildSongRoute } from '$lib/router'
   import { formatRelativeTime } from '$lib/songPresentation'
   import { loadSong, type SongSummary } from '$lib/songs'
+  import Avatar from './Avatar.svelte'
   import Name from './Name.svelte'
   import ListRow from './ListRow.svelte'
 
@@ -166,13 +167,17 @@
   {#snippet body()}
     <div class="min-w-0">
       <div class="truncate text-sm font-medium">{song.title}</div>
-      {#if showOwner}
-        <div class="mt-1 text-xs">
-          <Name npub={song.ownerNpub} class="text-primary" />
-        </div>
-      {/if}
-      <div class="mt-1 text-xs text-gray-400">
-        {song.effects.length} effects · seed {song.seed} · {formatRelativeTime(song.createdAt)}
+      <div class="mt-1 flex items-center gap-2 text-xs text-gray-400">
+        {#if showOwner}
+          <Avatar
+            pubkey={song.ownerPubkey}
+            size={18}
+            wrapperClass="border border-surface-lighter shadow-sm"
+          />
+          <Name npub={song.ownerNpub} class="min-w-0 text-gray-400" />
+          <span aria-hidden="true" class="text-gray-500">·</span>
+        {/if}
+        <span>{formatRelativeTime(song.createdAt)}</span>
       </div>
       {#if playError}
         <div class="mt-1 text-xs text-red-400">{playError}</div>

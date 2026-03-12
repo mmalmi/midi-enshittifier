@@ -24,12 +24,7 @@
           {#snippet body()}
             <div class="min-w-0">
               <div class="truncate text-sm font-medium">{entry.recordName || entry.fileName}</div>
-              <div class="mt-1 text-xs text-gray-500">
-                {#if entry.recordName && entry.recordName !== entry.fileName}
-                  {entry.fileName} ·
-                {/if}
-                {entry.config.effects.length} effects · seed {entry.config.seed} · {formatRelativeTime(Math.floor(entry.timestamp / 1000))}
-              </div>
+              <div class="mt-1 text-xs text-gray-500">{formatRelativeTime(Math.floor(entry.timestamp / 1000))}</div>
             </div>
           {/snippet}
 

@@ -305,6 +305,54 @@ describe('echoChamber', () => {
   })
 })
 
+describe('octaveOops', () => {
+  it('can shift a melodic phrase by one octave', () => {
+    const midi = createTestMidi()
+    const lead = midi.tracks.find((t) => t.channel === 0)!
+    const before = lead.notes.map((note) => note.midi)
+
+    getEffect('octaveOops').apply(midi, 1.0, scriptedRng([0, 0.95, 0.2], 0.99))
+
+    expect(lead.notes.map((note) => note.midi)).toEqual(before.map((pitch) => pitch + 12))
+    expect(totalNotes(midi)).toBe(12)
+  })
+
+  it('can add octave doubles without deleting originals', () => {
+    const midi = createTestMidi()
+    const lead = midi.tracks.find((t) => t.channel === 0)!
+    const before = lead.notes.map((note) => ({ midi: note.midi, time: note.time, duration: note.duration }))
+
+    getEffect('octaveOops').apply(midi, 1.0, scriptedRng([0, 0.1, 0.2], 0.99))
+
+    expect(lead.notes.length).toBe(before.length * 2)
+    for (const note of before) {
+      expect(
+        lead.notes.some(
+          (candidate) =>
+            candidate.time === note.time &&
+            candidate.duration === note.duration &&
+            candidate.midi === note.midi + 12,
+        ),
+      ).toBe(true)
+    }
+  })
+
+  it('keeps octave-shifted notes within MIDI range', () => {
+    const midi = createMidi()
+    const low = addTrack(midi, 0)
+    const high = addTrack(midi, 1)
+    addNote(low, { midi: 1, time: 0, duration: 0.4, velocity: 0.8 })
+    addNote(high, { midi: 126, time: 0, duration: 0.4, velocity: 0.8 })
+
+    getEffect('octaveOops').apply(midi, 1.0, scriptedRng([0, 0.95, 0.8, 0, 0.95, 0.2], 0.99))
+
+    for (const pitch of collectPitches(midi)) {
+      expect(pitch).toBeGreaterThanOrEqual(0)
+      expect(pitch).toBeLessThanOrEqual(127)
+    }
+  })
+})
+
 describe('percussion preservation', () => {
   it('keeps original drum notes intact for non-drum effects', () => {
     const preserve = [
@@ -312,6 +360,7 @@ describe('percussion preservation', () => {
       'butterFingers',
       'volumeRollercoaster',
       'echoChamber',
+      'octaveOops',
     ]
 
     for (const id of preserve) {

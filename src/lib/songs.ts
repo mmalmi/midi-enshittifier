@@ -295,6 +295,23 @@ export function createSongsApi(deps: SongsDeps) {
     )
   }
 
+  async function publishRoot(key: string, rootCid: CID): Promise<void> {
+    if (!deps.resolver.publish) {
+      throw new Error('Resolver publish is not available')
+    }
+
+    await pushRootIfConfigured(rootCid)
+
+    const result = await deps.resolver.publish(key, rootCid, {
+      visibility: 'public',
+      labels: ['songs'],
+    })
+
+    if (!result.success) {
+      throw new Error('Failed to publish songs root')
+    }
+  }
+
   async function publishSong(input: PublishSongInput): Promise<PublishSongResult> {
     const owner = await deps.getOwner()
     if (!owner) throw new Error('Must be logged in to publish')
@@ -354,20 +371,7 @@ export function createSongsApi(deps: SongsDeps) {
 
     nextRoot = await writeSongOrder(nextRoot, [songId, ...existingOrder])
 
-    if (!deps.resolver.publish) {
-      throw new Error('Resolver publish is not available')
-    }
-
-    await pushRootIfConfigured(nextRoot)
-
-    const result = await deps.resolver.publish(key, nextRoot, {
-      visibility: 'public',
-      labels: ['songs'],
-    })
-
-    if (!result.success) {
-      throw new Error('Failed to publish songs root')
-    }
+    await publishRoot(key, nextRoot)
 
     return {
       songId,
@@ -466,20 +470,7 @@ export function createSongsApi(deps: SongsDeps) {
     let nextRoot = await deps.tree.removeEntry(rootCid, [], songId)
     nextRoot = await writeSongOrder(nextRoot, currentOrder.filter((id) => id !== songId))
 
-    if (!deps.resolver.publish) {
-      throw new Error('Resolver publish is not available')
-    }
-
-    await pushRootIfConfigured(nextRoot)
-
-    const result = await deps.resolver.publish(key, nextRoot, {
-      visibility: 'public',
-      labels: ['songs'],
-    })
-
-    if (!result.success) {
-      throw new Error('Failed to publish songs root')
-    }
+    await publishRoot(key, nextRoot)
 
     return true
   }
@@ -501,22 +492,71 @@ export function createSongsApi(deps: SongsDeps) {
 
     let nextRoot = await writeSongOrder(rootCid, nextOrder)
 
-    if (!deps.resolver.publish) {
-      throw new Error('Resolver publish is not available')
-    }
-
-    await pushRootIfConfigured(nextRoot)
-
-    const result = await deps.resolver.publish(key, nextRoot, {
-      visibility: 'public',
-      labels: ['songs'],
-    })
-
-    if (!result.success) {
-      throw new Error('Failed to publish songs root')
-    }
+    await publishRoot(key, nextRoot)
 
     return true
+  }
+
+  async function updateSongTitle(songId: string, title: string): Promise<SongManifest | null> {
+    const owner = await deps.getOwner()
+    if (!owner) throw new Error('Must be logged in to rename songs')
+
+    const key = resolverKeyForSongs(owner.npub)
+    const rootCid = await resolveSongsRootOrNull(key)
+    if (!rootCid) return null
+    if (!(await deps.tree.isDirectory(rootCid))) return null
+
+    const songEntry = await deps.tree.resolvePath(rootCid, songId)
+    if (!songEntry || songEntry.type !== LinkType.Dir) return null
+
+    const manifest = await readManifestFromEntry(deps.tree, rootCid, songId)
+    if (!manifest) return null
+    if (manifest.ownerPubkey !== owner.pubkey) {
+      throw new Error("Cannot rename someone else's song")
+    }
+
+    const nextManifest: SongManifest = {
+      ...manifest,
+      title: normalizeTitle(title),
+    }
+
+    if (nextManifest.title === manifest.title) {
+      return nextManifest
+    }
+
+    const manifestFile = await deps.tree.putFile(encodeManifest(nextManifest))
+    const songEntries = await deps.tree.listDirectory(songEntry.cid)
+    const nextSongDir = await deps.tree.putDirectory(
+      songEntries.map((entry) =>
+        entry.name === 'song.json'
+          ? {
+              name: 'song.json',
+              cid: manifestFile.cid,
+              size: manifestFile.size,
+              type: LinkType.File,
+            }
+          : {
+              name: entry.name,
+              cid: entry.cid,
+              size: entry.size,
+              type: entry.type,
+              meta: entry.meta,
+            },
+      ),
+    )
+    const nextRoot = await deps.tree.setEntry(
+      rootCid,
+      [],
+      songId,
+      nextSongDir.cid,
+      nextSongDir.size,
+      LinkType.Dir,
+      summaryMeta(nextManifest),
+    )
+
+    await publishRoot(key, nextRoot)
+
+    return nextManifest
   }
 
   return {
@@ -525,6 +565,7 @@ export function createSongsApi(deps: SongsDeps) {
     loadSong,
     deleteSong,
     reorderSongs,
+    updateSongTitle,
   }
 }
 
@@ -546,3 +587,4 @@ export const listUserSongs = defaultApi.listUserSongs
 export const loadSong = defaultApi.loadSong
 export const deleteSong = defaultApi.deleteSong
 export const reorderSongs = defaultApi.reorderSongs
+export const updateSongTitle = defaultApi.updateSongTitle

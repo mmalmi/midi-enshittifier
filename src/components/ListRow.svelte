@@ -50,13 +50,14 @@
 
   <div class="relative z-10 flex items-center gap-3 p-3">
     {#if href}
-      <a class="min-w-0 flex-1 select-none no-underline text-white" {href}>
+      <a class="min-w-0 flex-1 select-none no-underline text-white" {href} draggable="false">
         {@render body()}
       </a>
     {:else}
       <button
         type="button"
         class="min-w-0 flex-1 cursor-pointer border-none bg-transparent p-0 text-left text-white select-none"
+        draggable="false"
         onclick={() => onactivate?.()}
       >
         {@render body()}
