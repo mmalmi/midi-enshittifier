@@ -112,6 +112,87 @@ describe('songs api', () => {
     expect((await api.loadSong('npub1owner', 'song-2'))?.manifest.title).toBe('Second')
   })
 
+  it('persists a manual song order', async () => {
+    const { api } = createTestSongsApi()
+
+    await api.publishSong({
+      title: 'First',
+      sourceFileName: 'first.mid',
+      originalData: new Uint8Array([1]),
+      enshittifiedData: new Uint8Array([2]),
+      seed: 1,
+      effects: [{ id: 'a', intensity: 1 }],
+    })
+
+    await api.publishSong({
+      title: 'Second',
+      sourceFileName: 'second.mid',
+      originalData: new Uint8Array([3]),
+      enshittifiedData: new Uint8Array([4]),
+      seed: 2,
+      effects: [{ id: 'b', intensity: 0.5 }],
+    })
+
+    await api.publishSong({
+      title: 'Third',
+      sourceFileName: 'third.mid',
+      originalData: new Uint8Array([5]),
+      enshittifiedData: new Uint8Array([6]),
+      seed: 3,
+      effects: [{ id: 'c', intensity: 0.7 }],
+    })
+
+    await expect(api.reorderSongs(['song-1', 'song-3', 'song-2'])).resolves.toBe(true)
+
+    const list = await api.listUserSongs('npub1owner')
+    expect(list.map((song) => song.id)).toEqual(['song-1', 'song-3', 'song-2'])
+  })
+
+  it('keeps manual order consistent across publish and delete', async () => {
+    const { api } = createTestSongsApi()
+
+    await api.publishSong({
+      title: 'First',
+      sourceFileName: 'first.mid',
+      originalData: new Uint8Array([1]),
+      enshittifiedData: new Uint8Array([2]),
+      seed: 1,
+      effects: [{ id: 'a', intensity: 1 }],
+    })
+
+    await api.publishSong({
+      title: 'Second',
+      sourceFileName: 'second.mid',
+      originalData: new Uint8Array([3]),
+      enshittifiedData: new Uint8Array([4]),
+      seed: 2,
+      effects: [{ id: 'b', intensity: 0.5 }],
+    })
+
+    await expect(api.reorderSongs(['song-1', 'song-2'])).resolves.toBe(true)
+
+    await api.publishSong({
+      title: 'Third',
+      sourceFileName: 'third.mid',
+      originalData: new Uint8Array([5]),
+      enshittifiedData: new Uint8Array([6]),
+      seed: 3,
+      effects: [{ id: 'c', intensity: 0.7 }],
+    })
+
+    expect((await api.listUserSongs('npub1owner')).map((song) => song.id)).toEqual([
+      'song-3',
+      'song-1',
+      'song-2',
+    ])
+
+    await expect(api.deleteSong('song-1')).resolves.toBe(true)
+    expect((await api.listUserSongs('npub1owner')).map((song) => song.id)).toEqual([
+      'song-3',
+      'song-2',
+    ])
+  })
+
   it('keeps an empty songs root after deleting the last song', async () => {
     const { api } = createTestSongsApi()
 

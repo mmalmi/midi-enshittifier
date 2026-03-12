@@ -48,6 +48,11 @@ export interface PublishSongResult {
   rootCid: CID
 }
 
+interface SongOrderFile {
+  version: 1
+  songIds: string[]
+}
+
 interface SongsTree {
   putFile(data: Uint8Array): Promise<{ cid: CID; size: number }>
   putDirectory(entries: Array<{ name: string; cid: CID; size: number; type: LinkType; meta?: Record<string, unknown> }>): Promise<{ cid: CID; size: number }>
@@ -80,6 +85,7 @@ interface SongsDeps {
 
 let defaultTree: HashTree | null = null
 let defaultBlossomStore: BlossomStore | null = null
+const SONG_ORDER_FILE = 'order.json'
 
 function getDefaultContext(): { tree: HashTree; blossomStore: BlossomStore } {
   if (defaultTree && defaultBlossomStore) {
@@ -141,9 +147,42 @@ function encodeManifest(manifest: SongManifest): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(manifest))
 }
 
+function normalizeSongIds(songIds: string[]): string[] {
+  const unique: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of songIds) {
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    unique.push(trimmed)
+  }
+
+  return unique
+}
+
+function encodeSongOrder(songIds: string[]): Uint8Array {
+  const payload: SongOrderFile = {
+    version: 1,
+    songIds: normalizeSongIds(songIds),
+  }
+  return new TextEncoder().encode(JSON.stringify(payload))
+}
+
 function decodeManifest(bytes: Uint8Array): SongManifest {
   const raw = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>
   return parseSongManifest(raw)
+}
+
+function decodeSongOrder(bytes: Uint8Array): string[] {
+  const raw = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>
+
+  if (raw.version !== 1 || !Array.isArray(raw.songIds)) {
+    throw new Error('Invalid song order file')
+  }
+
+  return normalizeSongIds(raw.songIds.filter((value): value is string => typeof value === 'string'))
 }
 
 export function parseSongManifest(value: unknown): SongManifest {
@@ -219,6 +258,20 @@ async function readManifestFromEntry(tree: SongsTree, rootCid: CID, songId: stri
   }
 }
 
+async function readSongOrder(tree: SongsTree, rootCid: CID): Promise<string[] | null> {
+  const orderEntry = await tree.resolvePath(rootCid, SONG_ORDER_FILE)
+  if (!orderEntry || orderEntry.type !== LinkType.File) return null
+
+  const bytes = await tree.readFile(orderEntry.cid)
+  if (!bytes) return null
+
+  try {
+    return decodeSongOrder(bytes)
+  } catch {
+    return null
+  }
+}
+
 export function createSongsApi(deps: SongsDeps) {
   async function resolveSongsRootOrNull(key: string): Promise<CID | null> {
     await deps.beforeResolve?.()
@@ -228,6 +281,18 @@ export function createSongsApi(deps: SongsDeps) {
   async function pushRootIfConfigured(rootCid: CID): Promise<void> {
     if (!deps.tree.push || !deps.pushTarget) return
     await deps.tree.push(rootCid, deps.pushTarget)
+  }
+
+  async function writeSongOrder(rootCid: CID, songIds: string[]): Promise<CID> {
+    const orderFile = await deps.tree.putFile(encodeSongOrder(songIds))
+    return deps.tree.setEntry(
+      rootCid,
+      [],
+      SONG_ORDER_FILE,
+      orderFile.cid,
+      orderFile.size,
+      LinkType.File,
+    )
   }
 
   async function publishSong(input: PublishSongInput): Promise<PublishSongResult> {
@@ -261,6 +326,7 @@ export function createSongsApi(deps: SongsDeps) {
     ])
 
     const existingRoot = await resolveSongsRootOrNull(key)
+    const existingOrder = existingRoot ? (await listUserSongs(owner.npub)).map((song) => song.id) : []
     let nextRoot: CID
 
     if (existingRoot && (await deps.tree.isDirectory(existingRoot))) {
@@ -285,6 +351,8 @@ export function createSongsApi(deps: SongsDeps) {
       ])
       nextRoot = root.cid
     }
+
+    nextRoot = await writeSongOrder(nextRoot, [songId, ...existingOrder])
 
     if (!deps.resolver.publish) {
       throw new Error('Resolver publish is not available')
@@ -339,7 +407,23 @@ export function createSongsApi(deps: SongsDeps) {
       })
     }
 
-    return summaries.sort((a, b) => b.createdAt - a.createdAt)
+    const storedOrder = await readSongOrder(deps.tree, rootCid)
+    if (!storedOrder) {
+      return summaries.sort((a, b) => b.createdAt - a.createdAt)
+    }
+
+    const byId = new Map(summaries.map((song) => [song.id, song]))
+    const ordered: SongSummary[] = []
+
+    for (const songId of storedOrder) {
+      const song = byId.get(songId)
+      if (!song) continue
+      ordered.push(song)
+      byId.delete(songId)
+    }
+
+    const remainder = Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt)
+    return [...ordered, ...remainder]
   }
 
   async function loadSong(npub: string, songId: string): Promise<LoadedSong | null> {
@@ -377,7 +461,45 @@ export function createSongsApi(deps: SongsDeps) {
     const existingEntry = await deps.tree.resolvePath(rootCid, songId)
     if (!existingEntry || existingEntry.type !== LinkType.Dir) return false
 
-    const nextRoot = await deps.tree.removeEntry(rootCid, [], songId)
+    const currentOrder = (await listUserSongs(owner.npub)).map((song) => song.id)
+
+    let nextRoot = await deps.tree.removeEntry(rootCid, [], songId)
+    nextRoot = await writeSongOrder(nextRoot, currentOrder.filter((id) => id !== songId))
+
+    if (!deps.resolver.publish) {
+      throw new Error('Resolver publish is not available')
+    }
+
+    await pushRootIfConfigured(nextRoot)
+
+    const result = await deps.resolver.publish(key, nextRoot, {
+      visibility: 'public',
+      labels: ['songs'],
+    })
+
+    if (!result.success) {
+      throw new Error('Failed to publish songs root')
+    }
+
+    return true
+  }
+
+  async function reorderSongs(songIds: string[]): Promise<boolean> {
+    const owner = await deps.getOwner()
+    if (!owner) throw new Error('Must be logged in to reorder songs')
+
+    const key = resolverKeyForSongs(owner.npub)
+    const rootCid = await resolveSongsRootOrNull(key)
+    if (!rootCid) return false
+    if (!(await deps.tree.isDirectory(rootCid))) return false
+
+    const currentOrder = (await listUserSongs(owner.npub)).map((song) => song.id)
+    if (currentOrder.length === 0) return false
+
+    const requested = normalizeSongIds(songIds).filter((id) => currentOrder.includes(id))
+    const nextOrder = [...requested, ...currentOrder.filter((id) => !requested.includes(id))]
+
+    let nextRoot = await writeSongOrder(rootCid, nextOrder)
 
     if (!deps.resolver.publish) {
       throw new Error('Resolver publish is not available')
@@ -402,6 +524,7 @@ export function createSongsApi(deps: SongsDeps) {
     listUserSongs,
     loadSong,
     deleteSong,
+    reorderSongs,
   }
 }
 
@@ -422,3 +545,4 @@ export const publishSong = defaultApi.publishSong
 export const listUserSongs = defaultApi.listUserSongs
 export const loadSong = defaultApi.loadSong
 export const deleteSong = defaultApi.deleteSong
+export const reorderSongs = defaultApi.reorderSongs

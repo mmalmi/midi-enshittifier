@@ -2,7 +2,7 @@
   import type { NDKUserProfile } from '@nostr-dev-kit/ndk'
   import Avatar from './Avatar.svelte'
   import Name from './Name.svelte'
-  import { deleteSong, listUserSongs, type SongSummary } from '$lib/songs'
+  import { deleteSong, listUserSongs, reorderSongs, type SongSummary } from '$lib/songs'
   import { getNostrState } from '$lib/nostr/store'
   import { followPubkey, getFollowsForPubkey, unfollowPubkey } from '$lib/nostr/follows'
   import { getFollowers } from '$lib/nostr/socialGraph'
@@ -26,6 +26,10 @@
   let followBusy = $state(false)
   let deleteBusySongId = $state<string | null>(null)
   let deleteError = $state<string | null>(null)
+  let reorderError = $state<string | null>(null)
+  let reorderBusy = $state(false)
+  let draggedSongId = $state<string | null>(null)
+  let dropTarget = $state<{ songId: string; position: 'before' | 'after' } | null>(null)
   let profile = $state<NDKUserProfile | null>(null)
   let refreshRequest = 0
   let activePlaybackId = $state<string | null>(null)
@@ -42,6 +46,7 @@
     loading = true
     error = null
     deleteError = null
+    reorderError = null
     profile = null
     songs = []
     followingCount = 0
@@ -108,7 +113,7 @@
   }
 
   async function handleDeleteSong(song: SongSummary) {
-    if (!isOwn || deleteBusySongId) return
+    if (!isOwn || deleteBusySongId || reorderBusy) return
     if (!window.confirm(`Delete "${song.title}" from your profile?`)) return
 
     deleteBusySongId = song.id
@@ -127,6 +132,97 @@
       deleteError = e instanceof Error ? e.message : 'Failed to delete song'
     } finally {
       deleteBusySongId = null
+    }
+  }
+
+  function clearDragState() {
+    draggedSongId = null
+    dropTarget = null
+  }
+
+  function reorderLocally(items: SongSummary[], movingId: string, targetId: string, position: 'before' | 'after'): SongSummary[] {
+    if (movingId === targetId) return items
+
+    const next = [...items]
+    const fromIndex = next.findIndex((song) => song.id === movingId)
+    if (fromIndex < 0) return items
+
+    const [movingSong] = next.splice(fromIndex, 1)
+    if (!movingSong) return items
+
+    let targetIndex = next.findIndex((song) => song.id === targetId)
+    if (targetIndex < 0) return items
+    if (position === 'after') targetIndex += 1
+
+    next.splice(targetIndex, 0, movingSong)
+    return next
+  }
+
+  function handleReorderDragStart(song: SongSummary, event: DragEvent) {
+    if (!isOwn || reorderBusy) {
+      event.preventDefault()
+      return
+    }
+
+    draggedSongId = song.id
+    dropTarget = null
+    reorderError = null
+
+    event.dataTransfer?.setData('text/plain', song.id)
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move'
+    }
+  }
+
+  function handleReorderDragOver(song: SongSummary, event: DragEvent) {
+    if (!isOwn || reorderBusy || !draggedSongId || draggedSongId === song.id) return
+    event.preventDefault()
+
+    const row = event.currentTarget
+    if (!(row instanceof HTMLElement)) return
+
+    const rect = row.getBoundingClientRect()
+    const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+    dropTarget = { songId: song.id, position }
+
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move'
+    }
+  }
+
+  async function handleReorderDrop(song: SongSummary, event: DragEvent) {
+    if (!isOwn || reorderBusy || !draggedSongId) return
+    event.preventDefault()
+
+    const row = event.currentTarget
+    if (!(row instanceof HTMLElement)) return
+
+    const rect = row.getBoundingClientRect()
+    const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+    const nextSongs = reorderLocally(songs, draggedSongId, song.id, position)
+
+    if (nextSongs === songs || nextSongs.every((entry, index) => entry.id === songs[index]?.id)) {
+      clearDragState()
+      return
+    }
+
+    const previousSongs = songs
+    songs = nextSongs
+    reorderBusy = true
+    reorderError = null
+
+    try {
+      const saved = await reorderSongs(nextSongs.map((entry) => entry.id))
+      if (!saved) {
+        songs = previousSongs
+        reorderError = 'Failed to save song order.'
+      }
+    } catch (e) {
+      songs = previousSongs
+      reorderError = e instanceof Error ? e.message : 'Failed to save song order.'
+    } finally {
+      reorderBusy = false
+      clearDragState()
     }
   }
 
@@ -190,6 +286,10 @@
     <div class="card text-red-400">{deleteError}</div>
   {/if}
 
+  {#if reorderError}
+    <div class="card text-red-400">{reorderError}</div>
+  {/if}
+
   {#if loading}
     <div class="card text-gray-400">Loading profile...</div>
   {:else if error}
@@ -197,17 +297,39 @@
   {:else if songs.length === 0}
     <div class="card text-gray-400">No songs published yet.</div>
   {:else}
-    <div class="grid gap-3">
+    <div class="grid gap-3" data-testid="profile-song-list" role="list">
       {#each songs as song (song.id)}
-        <PublishedSongRow
-          {song}
-          showDelete={isOwn}
-          deleteBusy={deleteBusySongId !== null}
-          {activePlaybackId}
-          onActivatePlayback={handleActivatePlayback}
-          onPlaybackState={handleSongPlayback}
-          onDelete={handleDeleteSong}
-        />
+        <div
+          class="relative transition-opacity duration-150 active:cursor-grabbing"
+          class:opacity-60={draggedSongId === song.id}
+          class:cursor-grab={isOwn && !reorderBusy}
+          data-testid="profile-song-row"
+          role="listitem"
+          draggable={isOwn && !reorderBusy}
+          aria-label={isOwn ? `Drag to reorder ${song.title}` : undefined}
+          ondragstart={(event) => handleReorderDragStart(song, event)}
+          ondragend={clearDragState}
+          ondragover={(event) => handleReorderDragOver(song, event)}
+          ondrop={(event) => handleReorderDrop(song, event)}
+        >
+          {#if dropTarget?.songId === song.id}
+            {#if dropTarget.position === 'before'}
+              <div class="pointer-events-none absolute -top-1 left-4 right-4 z-20 h-1 rounded-full bg-primary shadow-[0_0_14px_rgba(255,78,168,0.5)]"></div>
+            {:else}
+              <div class="pointer-events-none absolute -bottom-1 left-4 right-4 z-20 h-1 rounded-full bg-primary shadow-[0_0_14px_rgba(255,78,168,0.5)]"></div>
+            {/if}
+          {/if}
+
+          <PublishedSongRow
+            {song}
+            showDelete={isOwn}
+            deleteBusy={deleteBusySongId !== null || reorderBusy}
+            {activePlaybackId}
+            onActivatePlayback={handleActivatePlayback}
+            onPlaybackState={handleSongPlayback}
+            onDelete={handleDeleteSong}
+          />
+        </div>
       {/each}
     </div>
   {/if}
