@@ -48,6 +48,14 @@
       enabled = [{ id: e.id, intensity: Math.round((0.3 + Math.random() * 0.7) * 20) / 20 }]
     }
   }
+
+  function randomizeLevels() {
+    if (enabled.length === 0) return
+    enabled = enabled.map((effect) => ({
+      ...effect,
+      intensity: Math.round((0.1 + Math.random() * 0.9) * 20) / 20,
+    }))
+  }
 </script>
 
 <div class="space-y-3">
@@ -56,6 +64,9 @@
       Effects
     </h2>
     <div class="flex flex-wrap gap-2">
+      <button class="btn-ghost px-2.5 py-1 text-xs" onclick={randomizeLevels} disabled={enabled.length === 0}>
+        🎚 levels
+      </button>
       <button class="btn-ghost px-2.5 py-1 text-xs" onclick={randomize}>
         🎲 random
       </button>
