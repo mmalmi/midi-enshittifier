@@ -4,6 +4,7 @@ import {
   __resetAuthDepsForTests,
   __setAuthDepsForTests,
   authStorageKeys,
+  loginWithNsec,
   restoreOrBootstrapSession,
 } from './auth'
 import { clearSession, getNostrState } from './store'
@@ -103,5 +104,28 @@ describe('nostr auth', () => {
     expect(state.isLoggedIn).toBe(true)
     expect(state.loginType).toBe('nsec')
     expect(state.npub?.startsWith('npub1')).toBe(true)
+  })
+
+  it('persists nsec when logging in with one directly', async () => {
+    const nsec = nip19.nsecEncode(generateSecretKey())
+    const storage = memoryStorage()
+    const ndk = { signer: undefined as unknown }
+
+    __setAuthDepsForTests({
+      storage: () => storage,
+      getNdk: () => ndk as never,
+      ensureConnected: async () => {},
+      createPrivateSigner: (value) => ({ value }) as never,
+      createNip07Signer: () => ({ user: async () => ({ pubkey: 'x' }) }) as never,
+    })
+
+    const ok = await loginWithNsec(nsec)
+    expect(ok).toBe(true)
+
+    const state = getNostrState()
+    expect(state.isLoggedIn).toBe(true)
+    expect(state.loginType).toBe('nsec')
+    expect(storage.getItem(authStorageKeys.nsec)).toBe(nsec)
+    expect(storage.getItem(authStorageKeys.loginType)).toBe('nsec')
   })
 })

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { NDKUserProfile } from '@nostr-dev-kit/ndk'
+  import { nip19 } from 'nostr-tools'
   import Avatar from './Avatar.svelte'
   import Name from './Name.svelte'
   import { buildProfileRoute } from '$lib/router'
@@ -10,7 +11,6 @@
     loginWithExtension,
     loginWithNsec,
     logout,
-    switchToLocalAutologin,
   } from '$lib/nostr/auth'
 
   let showNsec = $state(false)
@@ -19,16 +19,11 @@
   let error = $state<string | null>(null)
   let profile = $state<NDKUserProfile | null>(null)
   let profileRequest = 0
+  let lastAutoSubmittedNsec = $state('')
 
   let isLoggedIn = $derived($nostrStore.isLoggedIn)
   let npub = $derived($nostrStore.npub)
   let pubkey = $derived($nostrStore.pubkey)
-  let loginType = $derived($nostrStore.loginType)
-
-  function shortNpub(value: string | null): string {
-    if (!value) return ''
-    return `${value.slice(0, 10)}...${value.slice(-6)}`
-  }
 
   let displayName = $derived(profileDisplayName(profile, animalNameFromPubkey(pubkey)))
 
@@ -58,32 +53,61 @@
     }
   }
 
-  async function doNsecLogin() {
+  function isValidNsec(value: string): boolean {
+    try {
+      return nip19.decode(value.trim()).type === 'nsec'
+    } catch {
+      return false
+    }
+  }
+
+  function closeNsecLogin(force = false) {
+    if (busy && !force) return
+    showNsec = false
+    nsecInput = ''
+    error = null
+    lastAutoSubmittedNsec = ''
+  }
+
+  function toggleNsecLogin() {
+    if (showNsec) {
+      closeNsecLogin()
+      return
+    }
+
+    error = null
+    lastAutoSubmittedNsec = ''
+    showNsec = true
+  }
+
+  async function doNsecLogin(value = nsecInput) {
+    const trimmed = value.trim()
+    if (!trimmed) return
+
     busy = true
     error = null
     try {
-      const ok = await loginWithNsec(nsecInput)
+      const ok = await loginWithNsec(trimmed)
       if (!ok) {
         error = 'Invalid nsec'
         return
       }
-      showNsec = false
-      nsecInput = ''
+      closeNsecLogin(true)
     } finally {
       busy = false
     }
   }
 
-  async function doLocalSwitch() {
-    busy = true
-    error = null
-    try {
-      const ok = await switchToLocalAutologin()
-      if (!ok) error = 'Could not switch to local account'
-    } finally {
-      busy = false
-    }
-  }
+  $effect(() => {
+    const trimmed = nsecInput.trim()
+
+    if (!showNsec || busy || !trimmed) return
+    if (trimmed === lastAutoSubmittedNsec) return
+    if (!isValidNsec(trimmed)) return
+
+    lastAutoSubmittedNsec = trimmed
+    void doNsecLogin(trimmed)
+  })
 </script>
 
 <div class="flex items-center gap-2 text-xs">
@@ -99,16 +123,13 @@
         />
       </a>
     {/if}
-    <span class="text-gray-400">{loginType}</span>
     <Name {pubkey} {profile} class="text-gray-300" />
-    <span class="text-gray-500">{shortNpub(npub)}</span>
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doExtensionLogin}>Ext</button>
-    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={() => (showNsec = !showNsec)}>Nsec</button>
-    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doLocalSwitch}>Local</button>
+    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={toggleNsecLogin}>Nsec</button>
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={logout}>Logout</button>
   {:else}
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doExtensionLogin}>Login Ext</button>
-    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={() => (showNsec = !showNsec)}>Login Nsec</button>
+    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={toggleNsecLogin}>Login Nsec</button>
   {/if}
 </div>
 
@@ -119,9 +140,10 @@
       class="w-60 rounded-lg bg-surface-light border border-surface-lighter px-2 py-1 text-xs text-white outline-none focus:border-primary-op50"
       bind:value={nsecInput}
       placeholder="nsec1..."
+      autocomplete="off"
       disabled={busy}
     />
-    <button class="btn-secondary px-2 py-1 text-xs" disabled={busy || !nsecInput.trim()} onclick={doNsecLogin}>Use nsec</button>
+    <button class="btn-ghost px-2 py-1 text-xs" disabled={busy} onclick={() => closeNsecLogin()}>Cancel</button>
   </div>
 {/if}
 

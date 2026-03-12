@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NDKUserProfile } from '@nostr-dev-kit/ndk'
   import { minidenticon } from 'minidenticons'
+  import { animalNameFromPubkey } from '$lib/animalName'
   import { profileDisplayName, profilePictureUrl } from '$lib/nostr/profiles'
 
   interface Props {
@@ -22,7 +23,7 @@
   let imageLoaded = $state(false)
   let imageFailed = $state(false)
 
-  let fallbackTitle = $derived(`${pubkey.slice(0, 8)}...`)
+  let fallbackTitle = $derived(animalNameFromPubkey(pubkey))
   let label = $derived(title || profileDisplayName(profile, fallbackTitle))
   let imageUrl = $derived(profilePictureUrl(profile))
   let identiconUrl = $derived(`data:image/svg+xml;utf8,${encodeURIComponent(minidenticon(pubkey))}`)
