@@ -9,6 +9,7 @@
   import { getFollowers } from '$lib/nostr/socialGraph'
   import { animalNameFromNpub, pubkeyFromNpub } from '$lib/animalName'
   import { fetchUserProfile, profileAbout, profileDisplayName } from '$lib/nostr/profiles'
+  import { formatRelativeTime } from '$lib/songPresentation'
 
   interface Props {
     npub: string
@@ -35,16 +36,6 @@
   let displayName = $derived(profileDisplayName(profile, fallbackName))
   let about = $derived(profileAbout(profile))
   let nip05 = $derived(typeof profile?.nip05 === 'string' ? profile.nip05.trim() : '')
-
-  function relTime(ts: number): string {
-    const diff = Math.floor(Date.now() / 1000) - ts
-    if (diff < 60) return `${diff}s ago`
-    const mins = Math.floor(diff / 60)
-    if (mins < 60) return `${mins}m ago`
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return `${hrs}h ago`
-    return `${Math.floor(hrs / 24)}d ago`
-  }
 
   async function refresh() {
     const requestId = ++refreshRequest
@@ -198,7 +189,7 @@
         <div class="card group flex items-start justify-between gap-3 hover:border-primary">
           <a class="min-w-0 flex-1 no-underline text-white" href={buildSongRoute(npub, song.id)}>
             <div class="text-sm font-medium">{song.title}</div>
-            <div class="text-xs text-gray-400 mt-1">{song.effects.length} effects · seed {song.seed} · {relTime(song.createdAt)}</div>
+            <div class="text-xs text-gray-400 mt-1">{song.effects.length} effects · seed {song.seed} · {formatRelativeTime(song.createdAt)}</div>
           </a>
 
           {#if isOwn}

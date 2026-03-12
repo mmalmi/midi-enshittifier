@@ -6,6 +6,7 @@
   import { getFollowsForPubkey } from '$lib/nostr/follows'
   import { listUserSongs, type SongSummary } from '$lib/songs'
   import { buildSongRoute } from '$lib/router'
+  import { formatRelativeTime } from '$lib/songPresentation'
 
   interface FeedItem extends SongSummary {
     route: string
@@ -47,17 +48,6 @@
     }
 
     return ordered
-  }
-
-  function relTime(ts: number): string {
-    const diff = Math.floor(Date.now() / 1000) - ts
-    if (diff < 60) return `${diff}s ago`
-    const mins = Math.floor(diff / 60)
-    if (mins < 60) return `${mins}m ago`
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return `${hrs}h ago`
-    const days = Math.floor(hrs / 24)
-    return `${days}d ago`
   }
 
   async function loadFeed() {
@@ -133,7 +123,7 @@
           <div class="text-sm font-medium">{item.title}</div>
           <div class="text-xs text-gray-400 mt-1">
             <Name npub={item.ownerNpub} class="text-primary" />
-            · {item.effects.length} effects · seed {item.seed} · {relTime(item.createdAt)}
+            · {item.effects.length} effects · seed {item.seed} · {formatRelativeTime(item.createdAt)}
           </div>
         </a>
       {/each}

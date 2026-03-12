@@ -1,10 +1,12 @@
 <script lang="ts">
   import { writeMidi, type MidiFile } from '$lib/midi'
+  import { downloadBytes } from '$lib/download'
   import { effects, enshittify, type EnabledEffect } from '$lib/effects'
   import { publishSong } from '$lib/songs'
   import { getNostrState } from '$lib/nostr/store'
   import { restoreOrBootstrapSession } from '$lib/nostr/auth'
   import { addRecent, type RecentShare } from '$lib/recents'
+  import { defaultRecordName, trackInfo } from '$lib/songPresentation'
   import { buildShareUrl, shareMidi } from '$lib/sharing'
   import EffectsPanel from './EffectsPanel.svelte'
   import Player from './Player.svelte'
@@ -40,28 +42,6 @@
   let publishError = $state<string | null>(null)
   let showAdvanced = $state(false)
 
-  function defaultRecordName(name: string): string {
-    const trimmed = name.trim()
-    if (!trimmed) return ''
-    return trimmed.replace(/\.[^/.]+$/, '')
-  }
-
-  function trackInfo(midi: MidiFile): string {
-    const tracks = midi.tracks.filter((t) => t.notes.length > 0).length
-    const notes = midi.tracks.reduce((sum, track) => sum + track.notes.length, 0)
-    let duration = 0
-
-    for (const track of midi.tracks) {
-      for (const note of track.notes) {
-        duration = Math.max(duration, note.time + note.duration)
-      }
-    }
-
-    const minutes = Math.floor(duration / 60)
-    const seconds = Math.floor(duration % 60)
-    return `${tracks} tracks · ${notes} notes · ${minutes}:${seconds.toString().padStart(2, '0')}`
-  }
-
   $effect(() => {
     originalMidi
     fileName
@@ -80,14 +60,7 @@
 
   function download() {
     if (!enshittifiedMidi) return
-    const data = writeMidi(enshittifiedMidi)
-    const blob = new Blob([data as BlobPart], { type: 'audio/midi' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `enshittified_${fileName}`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBytes(`enshittified_${fileName}`, writeMidi(enshittifiedMidi), 'audio/midi')
   }
 
   async function share() {

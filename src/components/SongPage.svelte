@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { parseMidi, writeMidi, type MidiFile } from '$lib/midi'
+  import { downloadBytes } from '$lib/download'
   import { loadSong } from '$lib/songs'
   import { buildProfileRoute } from '$lib/router'
   import type { EnabledEffect } from '$lib/effects'
   import type { RecentShare } from '$lib/recents'
+  import { formatRelativeTime } from '$lib/songPresentation'
   import Name from './Name.svelte'
   import SongWorkbench from './SongWorkbench.svelte'
   import {
@@ -21,9 +23,10 @@
     npub: string
     songId: string
     onRecentsChanged?: (next: RecentShare[]) => void
+    onPlaybackState?: (playing: boolean) => void
   }
 
-  let { npub, songId, onRecentsChanged }: Props = $props()
+  let { npub, songId, onRecentsChanged, onPlaybackState }: Props = $props()
 
   let loading = $state(true)
   let error = $state<string | null>(null)
@@ -52,16 +55,6 @@
   let commentUnsub: (() => void) | null = null
 
   const identifier = $derived(`${npub}/songs/${songId}`)
-
-  function relTime(ts: number): string {
-    const diff = Math.floor(Date.now() / 1000) - ts
-    if (diff < 60) return `${diff}s ago`
-    const mins = Math.floor(diff / 60)
-    if (mins < 60) return `${mins}m ago`
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return `${hrs}h ago`
-    return `${Math.floor(hrs / 24)}d ago`
-  }
 
   async function refreshSong() {
     loading = true
@@ -100,14 +93,7 @@
     const midi = kind === 'original' ? originalMidi : enshittifiedMidi
     if (!midi) return
 
-    const data = writeMidi(midi)
-    const blob = new Blob([data as BlobPart], { type: 'audio/midi' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${kind}_${songId}.mid`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBytes(`${kind}_${songId}.mid`, writeMidi(midi), 'audio/midi')
   }
 
   async function doLike() {
@@ -205,6 +191,7 @@
       bind:enshittifiedMidi
       bind:lastSeed={editorSeed}
       onRecentsChanged={onRecentsChanged}
+      {onPlaybackState}
     />
 
     <div class="card">
@@ -226,7 +213,7 @@
         <div class="space-y-2">
           {#each comments as comment (comment.id)}
             <div class="rounded-lg bg-surface p-2">
-              <div class="text-xs text-gray-400"><Name pubkey={comment.pubkey} /> · {relTime(comment.createdAt)}</div>
+              <div class="text-xs text-gray-400"><Name pubkey={comment.pubkey} /> · {formatRelativeTime(comment.createdAt)}</div>
               <div class="text-sm mt-1">{comment.content}</div>
             </div>
           {/each}

@@ -16,6 +16,7 @@
   import appLogo from './assets/pepe-listening-transparent.png?inline'
   import { effects, enshittify, type EnabledEffect } from '$lib/effects'
   import { getRecents, removeRecent, type RecentShare } from '$lib/recents'
+  import { defaultRecordName } from '$lib/songPresentation'
   import {
     parseUrlHash,
     loadShareFromNhash,
@@ -38,12 +39,6 @@
   let isPlaying = $state(false)
 
   let currentNpub = $derived($nostrStore.npub)
-
-  function defaultRecordName(name: string): string {
-    const n = name.trim()
-    if (!n) return ''
-    return n.replace(/\.[^/.]+$/, '')
-  }
 
   async function loadLegacyShareFromHash() {
     const { nhash, config: legacyConfig } = parseUrlHash()
@@ -157,32 +152,47 @@
   }
 </script>
 
-<nav class="card mb-4 flex flex-wrap items-center justify-between gap-2">
-  <div class="flex items-center gap-2 text-sm">
-    <a class="btn-ghost px-3 py-1 no-underline text-white" href="#/">Home</a>
-    <a class="btn-ghost px-3 py-1 no-underline text-white" href="#/feed">Feed</a>
-    {#if currentNpub}
-      <a class="btn-ghost px-3 py-1 no-underline text-white" href={buildProfileRoute(currentNpub)}>Profile</a>
-    {/if}
+<header class="card mb-4 flex flex-wrap items-center justify-between gap-3">
+  <a class="flex min-w-0 items-center gap-3 no-underline text-white" href="#/">
+    <JamLogo
+      src={appLogo}
+      alt="Pepe listening to music"
+      playing={isPlaying}
+      size={44}
+      inline
+    />
+    <div class="min-w-0">
+      <div class="text-lg font-bold leading-tight">
+        <span class="text-primary">MIDI</span> Enshittifier
+      </div>
+      <div class="text-xs text-gray-500">make any MIDI file objectively worse</div>
+    </div>
+  </a>
+
+  <div class="flex flex-wrap items-center justify-end gap-2">
+    <nav class="flex flex-wrap items-center gap-2 text-sm">
+      <a class="btn-ghost px-3 py-1 no-underline text-white" href="#/">Home</a>
+      <a class="btn-ghost px-3 py-1 no-underline text-white" href="#/feed">Feed</a>
+      {#if currentNpub}
+        <a class="btn-ghost px-3 py-1 no-underline text-white" href={buildProfileRoute(currentNpub)}>Profile</a>
+      {/if}
+    </nav>
+    <NostrAuth />
   </div>
-  <NostrAuth />
-</nav>
+</header>
 
 {#if route.type === 'feed'}
   <FeedPage />
 {:else if route.type === 'profile'}
   <ProfilePage npub={route.npub} />
 {:else if route.type === 'song'}
-  <SongPage npub={route.npub} songId={route.songId} onRecentsChanged={handleRecentsChanged} />
+  <SongPage
+    npub={route.npub}
+    songId={route.songId}
+    onRecentsChanged={handleRecentsChanged}
+    onPlaybackState={handlePlaybackState}
+  />
 {:else if isHomeLike(route)}
-  <header class="text-center mb-8">
-    <JamLogo src={appLogo} alt="Pepe listening to music" playing={isPlaying} />
-    <h1 class="text-3xl font-bold mb-1">
-      <span class="text-primary">MIDI</span> Enshittifier
-    </h1>
-    <p class="text-gray-500 text-sm">make any MIDI file objectively worse</p>
-  </header>
-
   {#if loadingShared}
     <div class="text-center py-12 text-gray-400" data-testid="loading-shared">
       <span class="inline-block spin-unicorn" aria-hidden="true">🦄</span>

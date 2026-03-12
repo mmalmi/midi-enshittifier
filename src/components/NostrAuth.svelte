@@ -11,6 +11,7 @@
     loginWithExtension,
     loginWithNsec,
     logout,
+    switchToLocalAutologin,
   } from '$lib/nostr/auth'
 
   let showNsec = $state(false)
@@ -48,6 +49,17 @@
     try {
       const ok = await loginWithExtension()
       if (!ok) error = 'Extension login failed'
+    } finally {
+      busy = false
+    }
+  }
+
+  async function doGenerateKeyLogin() {
+    busy = true
+    error = null
+    try {
+      const ok = await switchToLocalAutologin()
+      if (!ok) error = 'Could not create browser key'
     } finally {
       busy = false
     }
@@ -108,6 +120,11 @@
     lastAutoSubmittedNsec = trimmed
     void doNsecLogin(trimmed)
   })
+
+  $effect(() => {
+    if (!isLoggedIn) return
+    closeNsecLogin(true)
+  })
 </script>
 
 <div class="flex items-center gap-2 text-xs">
@@ -124,12 +141,11 @@
       </a>
     {/if}
     <Name {pubkey} {profile} class="text-gray-300" />
-    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doExtensionLogin}>Ext</button>
-    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={toggleNsecLogin}>Nsec</button>
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={logout}>Logout</button>
   {:else}
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doExtensionLogin}>Login Ext</button>
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={toggleNsecLogin}>Login Nsec</button>
+    <button class="btn-secondary px-2 py-1" disabled={busy} onclick={doGenerateKeyLogin}>Generate Key</button>
   {/if}
 </div>
 

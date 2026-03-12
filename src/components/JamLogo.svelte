@@ -5,10 +5,14 @@
     src,
     alt,
     playing,
+    size = 96,
+    inline = false,
   }: {
     src: string
     alt: string
     playing: boolean
+    size?: number
+    inline?: boolean
   } = $props()
 
   let logoWandering = $state(false)
@@ -200,6 +204,7 @@
 <div
   bind:this={logoWrapEl}
   class="logo-wrap"
+  class:inline={inline}
   class:wander={logoWandering}
   class:returning={logoReturning}
   style:--logo-x={`${logoX}px`}
@@ -210,6 +215,8 @@
     {alt}
     class="app-logo"
     class:jammin={playing}
+    style:width={`${size}px`}
+    style:max-width={inline ? `${size}px` : '28vw'}
     loading="lazy"
   />
 </div>

@@ -84,6 +84,12 @@ body {
   pointer-events: none;
 }
 
+.logo-wrap.inline {
+  justify-content: flex-start;
+  margin: 0;
+  z-index: 1;
+}
+
 .logo-wrap.wander {
   transition: transform 0.22s linear;
 }
