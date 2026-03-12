@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { NDKUserProfile } from '@nostr-dev-kit/ndk'
   import { onMount } from 'svelte'
   import { parseMidi, writeMidi, type MidiFile } from '$lib/midi'
   import { downloadBytes } from '$lib/download'
@@ -7,6 +8,8 @@
   import type { EnabledEffect } from '$lib/effects'
   import type { RecentShare } from '$lib/recents'
   import { formatRelativeTime, trackInfo } from '$lib/songPresentation'
+  import { fetchUserProfile, profileDisplayName } from '$lib/nostr/profiles'
+  import Avatar from './Avatar.svelte'
   import Name from './Name.svelte'
   import SongWorkbench from './SongWorkbench.svelte'
   import {
@@ -37,6 +40,8 @@
   let publishedSeed = $state(0)
   let effectsCount = $state(0)
   let ownerPubkey = $state<string | null>(null)
+  let ownerProfile = $state<NDKUserProfile | null>(null)
+  let ownerProfileRequest = 0
   let editorEnabled = $state<EnabledEffect[]>([])
   let editorSeed = $state<number | null>(null)
   let editorShareName = $state('')
@@ -55,10 +60,27 @@
   let commentUnsub: (() => void) | null = null
 
   const identifier = $derived(`${npub}/songs/${songId}`)
+  const ownerDisplayName = $derived(profileDisplayName(ownerProfile))
+
+  $effect(() => {
+    const currentOwnerPubkey = ownerPubkey
+    const requestId = ++ownerProfileRequest
+
+    if (!currentOwnerPubkey) {
+      ownerProfile = null
+      return
+    }
+
+    void fetchUserProfile(currentOwnerPubkey).then((nextProfile) => {
+      if (requestId !== ownerProfileRequest) return
+      ownerProfile = nextProfile
+    })
+  })
 
   async function refreshSong() {
     loading = true
     error = null
+    ownerProfile = null
 
     try {
       const loaded = await loadSong(npub, songId)
@@ -174,14 +196,41 @@
       <div class="mt-1 text-xs text-gray-500">{trackInfo(originalMidi)}</div>
 
       <div class="mt-3 flex flex-wrap gap-2 text-xs">
-        <a class="btn-ghost px-3 py-1 no-underline text-white" href={buildProfileRoute(npub)}>Profile</a>
+        {#if ownerPubkey}
+          <a
+            class="inline-flex max-w-full items-center gap-2 rounded-lg bg-surface px-3 py-1 no-underline text-white transition-colors hover:bg-surface-lighter"
+            href={buildProfileRoute(npub)}
+            title={`Open ${ownerDisplayName} profile`}
+          >
+            <Avatar
+              pubkey={ownerPubkey}
+              profile={ownerProfile}
+              size={24}
+              title={ownerDisplayName}
+              wrapperClass="border border-surface-lighter shadow-sm"
+            />
+            <Name npub={npub} profile={ownerProfile} class="min-w-0 text-xs font-medium text-white" />
+          </a>
+        {/if}
         {#if ownerPubkey && ownerPubkey !== getNostrState().pubkey}
           <button class="btn-secondary px-3 py-1" onclick={toggleFollowOwner} disabled={followBusy}>
             {followBusy ? '...' : isFollowingOwner ? 'Unfollow' : 'Follow'}
           </button>
         {/if}
-        <button class="btn-ghost px-3 py-1" onclick={doLike} disabled={likeBusy}>{userLiked ? 'Liked' : 'Like'} ({likeCount})</button>
-        <button class="btn-secondary px-3 py-1" onclick={() => download('original')}>Download Original</button>
+        <button class="btn-ghost px-3 py-1" onclick={doLike} disabled={likeBusy}>
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill={userLiked ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 20.5 4.9 13.9a4.77 4.77 0 0 1 0-6.82 4.57 4.57 0 0 1 6.66 0L12 7.53l.44-.45a4.57 4.57 0 0 1 6.66 0 4.77 4.77 0 0 1 0 6.82L12 20.5Z" />
+          </svg>
+          {userLiked ? 'Liked' : 'Like'} ({likeCount})
+        </button>
+        <button class="btn-secondary px-3 py-1" onclick={() => download('original')}>
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 4.5v10" />
+            <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+            <path d="M5 18.5h14" />
+          </svg>
+          Download Original
+        </button>
       </div>
     </div>
 
