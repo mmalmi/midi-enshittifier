@@ -3,8 +3,10 @@
   import { parseMidi, writeMidi, type MidiFile } from '$lib/midi'
   import { loadSong } from '$lib/songs'
   import { buildProfileRoute } from '$lib/router'
+  import type { EnabledEffect } from '$lib/effects'
+  import type { RecentShare } from '$lib/recents'
   import Name from './Name.svelte'
-  import Player from './Player.svelte'
+  import SongWorkbench from './SongWorkbench.svelte'
   import {
     publishComment,
     subscribeComments,
@@ -18,18 +20,23 @@
   interface Props {
     npub: string
     songId: string
+    onRecentsChanged?: (next: RecentShare[]) => void
   }
 
-  let { npub, songId }: Props = $props()
+  let { npub, songId, onRecentsChanged }: Props = $props()
 
   let loading = $state(true)
   let error = $state<string | null>(null)
   let originalMidi = $state<MidiFile | null>(null)
   let enshittifiedMidi = $state<MidiFile | null>(null)
   let title = $state('')
-  let seed = $state(0)
+  let fileName = $state('')
+  let publishedSeed = $state(0)
   let effectsCount = $state(0)
   let ownerPubkey = $state<string | null>(null)
+  let editorEnabled = $state<EnabledEffect[]>([])
+  let editorSeed = $state<number | null>(null)
+  let editorShareName = $state('')
 
   let likeCount = $state(0)
   let userLiked = $state(false)
@@ -70,9 +77,13 @@
       originalMidi = parseMidi(loaded.original)
       enshittifiedMidi = parseMidi(loaded.enshittified)
       title = loaded.manifest.title
-      seed = loaded.manifest.seed
+      fileName = loaded.manifest.sourceFileName
+      publishedSeed = loaded.manifest.seed
       effectsCount = loaded.manifest.effects.length
       ownerPubkey = loaded.manifest.ownerPubkey
+      editorEnabled = loaded.manifest.effects.map((effect) => ({ ...effect }))
+      editorSeed = loaded.manifest.seed
+      editorShareName = loaded.manifest.title
 
       if (ownerPubkey && getNostrState().pubkey) {
         const follows = await getFollowsForPubkey(getNostrState().pubkey!)
@@ -168,11 +179,11 @@
   <div class="card text-gray-400">Loading song...</div>
 {:else if error}
   <div class="card text-red-400">{error}</div>
-{:else if originalMidi && enshittifiedMidi}
+  {:else if originalMidi && enshittifiedMidi}
   <div class="space-y-4">
     <div class="card">
       <div class="text-xl font-semibold">{title}</div>
-      <div class="text-xs text-gray-400 mt-1">{effectsCount} effects · seed {seed}</div>
+      <div class="text-xs text-gray-400 mt-1">{effectsCount} effects · seed {publishedSeed}</div>
 
       <div class="mt-3 flex flex-wrap gap-2 text-xs">
         <a class="btn-ghost px-3 py-1 no-underline text-white" href={buildProfileRoute(npub)}>Profile</a>
@@ -183,11 +194,18 @@
         {/if}
         <button class="btn-ghost px-3 py-1" onclick={doLike} disabled={likeBusy}>{userLiked ? 'Liked' : 'Like'} ({likeCount})</button>
         <button class="btn-secondary px-3 py-1" onclick={() => download('original')}>Download Original</button>
-        <button class="btn-secondary px-3 py-1" onclick={() => download('enshittified')}>Download Enshittified</button>
       </div>
     </div>
 
-    <Player original={originalMidi} enshittified={enshittifiedMidi} />
+    <SongWorkbench
+      {originalMidi}
+      fileName={fileName || `${songId}.mid`}
+      bind:enabled={editorEnabled}
+      bind:shareName={editorShareName}
+      bind:enshittifiedMidi
+      bind:lastSeed={editorSeed}
+      onRecentsChanged={onRecentsChanged}
+    />
 
     <div class="card">
       <div class="text-sm font-medium mb-2">Comments ({comments.length})</div>

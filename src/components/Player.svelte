@@ -164,11 +164,9 @@
 <div class="card space-y-3">
   <div class="flex gap-2">
     <button
-      class="play-btn flex-1 py-2 rounded-lg font-medium text-sm transition-all duration-150"
+      class="play-btn flex-1 py-2 rounded-lg border border-surface-lighter font-medium text-sm text-white shadow-sm transition-all duration-150"
       class:bg-primary={which === 'original'}
-      class:text-white={which === 'original'}
       class:bg-surface-lighter={which !== 'original'}
-      class:text-gray-300={which !== 'original'}
       disabled={!original || loading}
       onclick={() => (which === 'original' && playing ? stop() : play('original'))}
     >
@@ -186,11 +184,9 @@
       </span>
     </button>
     <button
-      class="play-btn flex-1 py-2 rounded-lg font-medium text-sm transition-all duration-150"
+      class="play-btn flex-1 py-2 rounded-lg border border-surface-lighter font-medium text-sm text-white shadow-sm transition-all duration-150"
       class:bg-primary={which === 'enshittified'}
-      class:text-white={which === 'enshittified'}
       class:bg-surface-lighter={which !== 'enshittified'}
-      class:text-gray-300={which !== 'enshittified'}
       disabled={!enshittified || loading}
       onclick={() =>
         which === 'enshittified' && playing ? stop() : play('enshittified')}
