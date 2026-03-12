@@ -2,6 +2,7 @@ import { HashTree, FallbackStore, BlossomStore, LinkType } from '@hashtree/core'
 import { DexieStore } from '@hashtree/dexie'
 import { nhashEncode, nhashDecode, isNHash } from '@hashtree/core'
 import type { EnabledEffect } from './effects'
+import { createBlossomStore } from './blossom'
 
 let treeSingleton: HashTree | null = null
 let blossomSingleton: BlossomStore | null = null
@@ -12,13 +13,7 @@ function getSharingContext(): { tree: HashTree; blossomStore: BlossomStore } {
   }
 
   const dexieStore = new DexieStore('midi-enshittifier')
-  const blossomStore = new BlossomStore({
-    servers: [
-      { url: 'https://cdn.iris.to', read: true, write: false },
-      { url: 'https://upload.iris.to', read: false, write: true },
-      { url: 'https://blossom.primal.net', read: true, write: true },
-    ],
-  })
+  const blossomStore = createBlossomStore()
   const store = new FallbackStore({
     primary: dexieStore,
     fallbacks: [blossomStore],

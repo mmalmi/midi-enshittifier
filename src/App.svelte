@@ -152,8 +152,8 @@
   }
 </script>
 
-<header class="card mb-4 flex flex-wrap items-center justify-between gap-4">
-  <a class="flex min-w-0 items-center gap-4 no-underline text-white" href="#/">
+<header class="card mb-4 flex flex-col items-center gap-4 text-center">
+  <a class="flex min-w-0 flex-col items-center gap-3 no-underline text-white" href="#/">
     <JamLogo
       src={appLogo}
       alt="Pepe listening to music"
@@ -161,7 +161,7 @@
       size={96}
       inline
     />
-    <div class="min-w-0">
+    <div class="min-w-0 text-center">
       <div class="text-2xl font-bold leading-tight">
         <span class="text-primary">MIDI</span> Enshittifier
       </div>
@@ -169,15 +169,17 @@
     </div>
   </a>
 
-  <div class="flex flex-wrap items-center justify-end gap-2">
-    <nav class="flex flex-wrap items-center gap-2 text-sm">
+  <div class="flex w-full flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <nav class="flex flex-wrap items-center justify-center gap-2 text-sm">
       <a class="btn-ghost px-3 py-1 no-underline text-white" href="#/">Home</a>
       <a class="btn-ghost px-3 py-1 no-underline text-white" href="#/feed">Feed</a>
       {#if currentNpub}
         <a class="btn-ghost px-3 py-1 no-underline text-white" href={buildProfileRoute(currentNpub)}>Profile</a>
       {/if}
     </nav>
-    <NostrAuth />
+    <div class="flex w-full justify-center sm:w-auto sm:justify-end">
+      <NostrAuth />
+    </div>
   </div>
 </header>
 

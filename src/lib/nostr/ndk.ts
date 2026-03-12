@@ -6,13 +6,9 @@ import NDK, {
   type NDKSubscription,
   type NostrEvent,
 } from '@nostr-dev-kit/ndk'
+import { DEFAULT_NOSTR_RELAYS, getNostrRelayUrls } from '../runtimeConfig'
 
-export const DEFAULT_RELAYS = [
-  'wss://relay.damus.io',
-  'wss://relay.primal.net',
-  'wss://relay.nostr.band',
-  'wss://relay.snort.social',
-]
+export const DEFAULT_RELAYS = DEFAULT_NOSTR_RELAYS
 
 const CONNECT_WAIT_MS = 1500
 
@@ -23,7 +19,7 @@ export function getNdk(): NDK {
   if (ndkSingleton) return ndkSingleton
 
   ndkSingleton = new NDK({
-    explicitRelayUrls: DEFAULT_RELAYS,
+    explicitRelayUrls: getNostrRelayUrls(),
   })
   return ndkSingleton
 }
@@ -44,6 +40,23 @@ export async function signEvent(event: NostrEvent): Promise<NostrEvent> {
   const ndk = getNdk()
   if (!ndk.signer) throw new Error('No signer configured')
   const ndkEvent = new NDKEvent(ndk, event)
+  await ndkEvent.sign()
+  return ndkEvent.rawEvent() as NostrEvent
+}
+
+export async function signEventTemplate(event: {
+  kind: number
+  tags: string[][]
+  content: string
+  created_at: number
+}): Promise<NostrEvent> {
+  const ndk = getNdk()
+  if (!ndk.signer) throw new Error('No signer configured')
+  const ndkEvent = new NDKEvent(ndk)
+  ndkEvent.kind = event.kind
+  ndkEvent.tags = event.tags
+  ndkEvent.content = event.content
+  ndkEvent.created_at = event.created_at
   await ndkEvent.sign()
   return ndkEvent.rawEvent() as NostrEvent
 }

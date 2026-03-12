@@ -127,10 +127,14 @@
   })
 </script>
 
-<div class="flex items-center gap-2 text-xs">
+<div class="flex flex-wrap items-center justify-center gap-2 text-xs">
   {#if isLoggedIn}
     {#if npub && pubkey}
-      <a class="no-underline" href={buildProfileRoute(npub)} title="Open profile">
+      <a
+        class="flex items-center gap-2 rounded-lg px-2 py-1 no-underline text-white hover:bg-white/5"
+        href={buildProfileRoute(npub)}
+        title="Open profile"
+      >
         <Avatar
           pubkey={pubkey}
           {profile}
@@ -138,9 +142,11 @@
           title={displayName}
           wrapperClass="border border-surface-lighter shadow-sm"
         />
+        <Name {pubkey} {profile} class="text-gray-300" />
       </a>
+    {:else}
+      <Name {pubkey} {profile} class="text-gray-300" />
     {/if}
-    <Name {pubkey} {profile} class="text-gray-300" />
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={logout}>Logout</button>
   {:else}
     <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doExtensionLogin}>Login Ext</button>

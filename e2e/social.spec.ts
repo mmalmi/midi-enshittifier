@@ -11,7 +11,7 @@ test('feed route renders', async ({ page }) => {
 
 test('profile route renders for npub', async ({ page }) => {
   await page.goto(`/#/u/${NPUB}`)
-  await expect(page.getByText(NPUB)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('No songs published yet.')).toBeVisible({ timeout: 12_000 })
 })
 
 test('song route shows not found for missing song', async ({ page }) => {

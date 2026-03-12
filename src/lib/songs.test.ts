@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HashTree, MemoryStore, type CID, type PublishResult, type RefResolver } from '@hashtree/core'
+import { FallbackStore, HashTree, MemoryStore, type CID, type PublishResult, type RefResolver } from '@hashtree/core'
 import { createSongsApi, parseSongManifest } from './songs'
 
 function createTestSongsApi() {
@@ -133,6 +133,69 @@ describe('songs api', () => {
     const { api } = createTestSongsApi()
 
     await expect(api.deleteSong('song-404')).resolves.toBe(false)
+  })
+
+  it('makes a published song visible to a separate browser store before publish resolves', async () => {
+    const publisherLocal = new MemoryStore()
+    const readerLocal = new MemoryStore()
+    const remote = new MemoryStore()
+    const roots = new Map<string, CID>()
+    let seq = 0
+
+    const delayedRemote = {
+      async put(hash: Uint8Array, data: Uint8Array) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+        return remote.put(hash, data)
+      },
+      get: (hash: Uint8Array) => remote.get(hash),
+      has: (hash: Uint8Array) => remote.has(hash),
+      delete: (hash: Uint8Array) => remote.delete(hash),
+    }
+
+    const resolver: RefResolver = {
+      resolve: async (key) => roots.get(key) ?? null,
+      subscribe: () => () => {},
+      publish: async (key, cid): Promise<PublishResult> => {
+        roots.set(key, cid)
+        return { success: true }
+      },
+    }
+
+    const publisherApi = createSongsApi({
+      tree: new HashTree({ store: publisherLocal }),
+      resolver,
+      getOwner: () => ({ pubkey: 'b'.repeat(64), npub: 'npub1shared' }),
+      nowUnix: () => 2000 + seq,
+      makeSongId: () => `song-${++seq}`,
+      pushTarget: delayedRemote,
+    })
+
+    const readerApi = createSongsApi({
+      tree: new HashTree({
+        store: new FallbackStore({
+          primary: readerLocal,
+          fallbacks: [remote],
+          timeout: 100,
+        }),
+      }),
+      resolver,
+      getOwner: () => null,
+      nowUnix: () => 0,
+      makeSongId: () => 'unused',
+    })
+
+    await publisherApi.publishSong({
+      title: 'Shared Song',
+      sourceFileName: 'shared.mid',
+      originalData: new Uint8Array([1, 2, 3]),
+      enshittifiedData: new Uint8Array([4, 5, 6]),
+      seed: 7,
+      effects: [{ id: 'drunkNotes', intensity: 0.2 }],
+    })
+
+    const list = await readerApi.listUserSongs('npub1shared')
+    expect(list).toHaveLength(1)
+    expect(list[0].title).toBe('Shared Song')
   })
 
   it('validates and parses song manifests deterministically', () => {

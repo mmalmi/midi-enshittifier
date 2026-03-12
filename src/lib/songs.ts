@@ -6,6 +6,8 @@ import { buildSongRoute } from './router'
 import { getNostrState } from './nostr/store'
 import { getNdk } from './nostr/ndk'
 import { getResolver, resolverKeyForSongs } from './nostr/resolver'
+import { ensureNdkConnected } from './nostr/ndk'
+import { createBlossomStore } from './blossom'
 
 export interface SongManifest {
   version: 1
@@ -73,6 +75,7 @@ interface SongsDeps {
   nowUnix: () => number
   makeSongId: (title: string) => string
   pushTarget?: unknown
+  beforeResolve?: () => Promise<void>
 }
 
 let defaultTree: HashTree | null = null
@@ -84,13 +87,7 @@ function getDefaultContext(): { tree: HashTree; blossomStore: BlossomStore } {
   }
 
   const dexie = new DexieStore('midi-enshittifier')
-  const blossom = new BlossomStore({
-    servers: [
-      { url: 'https://cdn.iris.to', read: true, write: false },
-      { url: 'https://upload.iris.to', read: false, write: true },
-      { url: 'https://blossom.primal.net', read: true, write: true },
-    ],
-  })
+  const blossom = createBlossomStore()
 
   const fallback = new FallbackStore({
     primary: dexie,
@@ -223,6 +220,16 @@ async function readManifestFromEntry(tree: SongsTree, rootCid: CID, songId: stri
 }
 
 export function createSongsApi(deps: SongsDeps) {
+  async function resolveSongsRootOrNull(key: string): Promise<CID | null> {
+    await deps.beforeResolve?.()
+    return resolveRootOrNull(deps.resolver, key)
+  }
+
+  async function pushRootIfConfigured(rootCid: CID): Promise<void> {
+    if (!deps.tree.push || !deps.pushTarget) return
+    await deps.tree.push(rootCid, deps.pushTarget)
+  }
+
   async function publishSong(input: PublishSongInput): Promise<PublishSongResult> {
     const owner = await deps.getOwner()
     if (!owner) throw new Error('Must be logged in to publish')
@@ -253,7 +260,7 @@ export function createSongsApi(deps: SongsDeps) {
       { name: 'song.json', cid: manifestFile.cid, size: manifestFile.size, type: LinkType.File },
     ])
 
-    const existingRoot = await resolveRootOrNull(deps.resolver, key)
+    const existingRoot = await resolveSongsRootOrNull(key)
     let nextRoot: CID
 
     if (existingRoot && (await deps.tree.isDirectory(existingRoot))) {
@@ -283,6 +290,8 @@ export function createSongsApi(deps: SongsDeps) {
       throw new Error('Resolver publish is not available')
     }
 
+    await pushRootIfConfigured(nextRoot)
+
     const result = await deps.resolver.publish(key, nextRoot, {
       visibility: 'public',
       labels: ['songs'],
@@ -290,10 +299,6 @@ export function createSongsApi(deps: SongsDeps) {
 
     if (!result.success) {
       throw new Error('Failed to publish songs root')
-    }
-
-    if (deps.tree.push && deps.pushTarget) {
-      deps.tree.push(nextRoot, deps.pushTarget).catch(() => {})
     }
 
     return {
@@ -306,7 +311,7 @@ export function createSongsApi(deps: SongsDeps) {
   }
 
   async function listUserSongs(npub: string): Promise<SongSummary[]> {
-    const rootCid = await resolveRootOrNull(deps.resolver, resolverKeyForSongs(npub))
+    const rootCid = await resolveSongsRootOrNull(resolverKeyForSongs(npub))
     if (!rootCid) return []
     if (!(await deps.tree.isDirectory(rootCid))) return []
 
@@ -338,7 +343,7 @@ export function createSongsApi(deps: SongsDeps) {
   }
 
   async function loadSong(npub: string, songId: string): Promise<LoadedSong | null> {
-    const rootCid = await resolveRootOrNull(deps.resolver, resolverKeyForSongs(npub))
+    const rootCid = await resolveSongsRootOrNull(resolverKeyForSongs(npub))
     if (!rootCid) return null
 
     const manifest = await readManifestFromEntry(deps.tree, rootCid, songId)
@@ -365,7 +370,7 @@ export function createSongsApi(deps: SongsDeps) {
     if (!owner) throw new Error('Must be logged in to delete')
 
     const key = resolverKeyForSongs(owner.npub)
-    const rootCid = await resolveRootOrNull(deps.resolver, key)
+    const rootCid = await resolveSongsRootOrNull(key)
     if (!rootCid) return false
     if (!(await deps.tree.isDirectory(rootCid))) return false
 
@@ -378,6 +383,8 @@ export function createSongsApi(deps: SongsDeps) {
       throw new Error('Resolver publish is not available')
     }
 
+    await pushRootIfConfigured(nextRoot)
+
     const result = await deps.resolver.publish(key, nextRoot, {
       visibility: 'public',
       labels: ['songs'],
@@ -385,10 +392,6 @@ export function createSongsApi(deps: SongsDeps) {
 
     if (!result.success) {
       throw new Error('Failed to publish songs root')
-    }
-
-    if (deps.tree.push && deps.pushTarget) {
-      deps.tree.push(nextRoot, deps.pushTarget).catch(() => {})
     }
 
     return true
@@ -411,6 +414,7 @@ const defaultApi = (() => {
     nowUnix: () => Math.floor(Date.now() / 1000),
     makeSongId: defaultSongId,
     pushTarget: blossomStore,
+    beforeResolve: ensureNdkConnected,
   })
 })()
 

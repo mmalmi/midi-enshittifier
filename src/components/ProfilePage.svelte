@@ -35,7 +35,6 @@
   let fallbackName = $derived(animalNameFromNpub(npub))
   let displayName = $derived(profileDisplayName(profile, fallbackName))
   let about = $derived(profileAbout(profile))
-  let nip05 = $derived(typeof profile?.nip05 === 'string' ? profile.nip05.trim() : '')
 
   async function refresh() {
     const requestId = ++refreshRequest
@@ -151,10 +150,6 @@
 
       <div class="min-w-0 flex-1">
         <Name npub={npub} {profile} class="text-lg font-semibold break-words" />
-
-        {#if nip05}
-          <div class="mt-1 text-xs text-primary break-all">{nip05}</div>
-        {/if}
 
         <div class="text-xs text-gray-400 mt-2">
           {songs.length} songs · {followingCount} following · {followerCount} followers
