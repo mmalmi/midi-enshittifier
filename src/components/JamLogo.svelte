@@ -5,12 +5,14 @@
     src,
     alt,
     playing,
+    chaos = false,
     size = 96,
     inline = false,
   }: {
     src: string
     alt: string
     playing: boolean
+    chaos?: boolean
     size?: number
     inline?: boolean
   } = $props()
@@ -51,6 +53,16 @@
   })
 
   function handlePlaybackState(isPlaying: boolean) {
+    if (inline) {
+      stopWandering()
+      stopReturning()
+      logoX = 0
+      logoY = 0
+      wanderVx = 0
+      wanderVy = 0
+      return
+    }
+
     if (isPlaying) {
       stopReturning()
       stopWandering()
@@ -207,9 +219,13 @@
   class:inline={inline}
   class:wander={logoWandering}
   class:returning={logoReturning}
+  class:playing={playing}
+  class:chaos={chaos}
   style:--logo-x={`${logoX}px`}
   style:--logo-y={`${logoY}px`}
 >
+  <span class="logo-halo logo-halo-a" aria-hidden="true"></span>
+  <span class="logo-halo logo-halo-b" aria-hidden="true"></span>
   <img
     {src}
     {alt}

@@ -142,13 +142,15 @@
   {:else}
     <div class="grid gap-3">
       {#each items as item (item.ownerNpub + ':' + item.id)}
-        <PublishedSongRow
-          song={item}
-          showOwner
-          {activePlaybackId}
-          onActivatePlayback={handleActivatePlayback}
-          onPlaybackState={handleSongPlayback}
-        />
+        <div class="min-w-0">
+          <PublishedSongRow
+            song={item}
+            showOwner
+            {activePlaybackId}
+            onActivatePlayback={handleActivatePlayback}
+            onPlaybackState={handleSongPlayback}
+          />
+        </div>
       {/each}
     </div>
   {/if}

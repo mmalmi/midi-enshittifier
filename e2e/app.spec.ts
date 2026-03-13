@@ -189,3 +189,76 @@ test('switching file while playing stops background playback', async ({ page }) 
   await newFileInput.setInputFiles(ALT_MIDI)
   await expect(page.getByText('clairdelune.mid')).toBeVisible()
 })
+
+test('replaying uploaded MIDI reuses the same AudioContext', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeAudioContext = window.AudioContext
+    ;(window as any).__audioContextCreates = 0
+
+    class CountingAudioContext extends NativeAudioContext {
+      constructor(contextOptions?: AudioContextOptions) {
+        super(contextOptions)
+        ;(window as any).__audioContextCreates++
+      }
+    }
+
+    ;(window as any).AudioContext = CountingAudioContext
+  })
+
+  await page.goto('/')
+  await page.locator('input[type="file"]').setInputFiles(REAL_MIDI)
+
+  const playBtn = page.getByRole('button', { name: /Original/ })
+
+  await playBtn.click()
+  await expect(playBtn).toContainText('⏹', { timeout: 30_000 })
+  await playBtn.click()
+  await expect(playBtn).toContainText('▶ Original')
+
+  await playBtn.click()
+  await expect(playBtn).toContainText('⏹', { timeout: 30_000 })
+
+  const audioContextCreates = await page.evaluate(() => (window as any).__audioContextCreates)
+  expect(audioContextCreates).toBe(1)
+})
+
+test('profile song rows stay within the viewport on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+
+  const title = `Overflow check ${Date.now()} with a deliberately long title for narrow screens`
+
+  await page.goto('/')
+  await page.locator('input[type="file"]').setInputFiles(FIXTURE)
+  await page.getByTestId('enshittify-btn').click()
+  await expect(page.getByTestId('download-btn')).toBeVisible()
+  await page.getByPlaceholder('Name the masterpiece').fill(title)
+  await page.getByRole('button', { name: 'Publish' }).click()
+
+  await expect(page).toHaveURL(/#\/u\/npub1/, { timeout: 15_000 })
+  await expect(page.getByText(title)).toBeVisible({ timeout: 15_000 })
+
+  const rowBounds = await page.getByTestId('profile-song-row').first().evaluate((row) => {
+    const viewportWidth = window.innerWidth
+    const elements = Array.from(row.querySelectorAll<HTMLElement>('a, button, div, span'))
+      .map((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          left: rect.left,
+          right: rect.right,
+        }
+      })
+      .filter((rect) => rect.right > rect.left)
+
+    return {
+      viewportWidth,
+      rowRight: row.getBoundingClientRect().right,
+      elements,
+    }
+  })
+
+  expect(rowBounds.rowRight).toBeLessThanOrEqual(rowBounds.viewportWidth + 1)
+  for (const rect of rowBounds.elements) {
+    expect(rect.left).toBeGreaterThanOrEqual(-1)
+    expect(rect.right).toBeLessThanOrEqual(rowBounds.viewportWidth + 1)
+  }
+})

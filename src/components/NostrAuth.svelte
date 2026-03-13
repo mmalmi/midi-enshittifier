@@ -127,11 +127,11 @@
   })
 </script>
 
-<div class="flex flex-wrap items-center justify-center gap-2 text-xs">
+<div class="flex max-w-full min-w-0 flex-wrap items-center justify-center gap-2 text-xs">
   {#if isLoggedIn}
     {#if npub && pubkey}
       <a
-        class="flex items-center gap-2 rounded-lg px-2 py-1 no-underline text-white hover:bg-white/5"
+        class="flex max-w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1 no-underline text-white hover:bg-white/5"
         href={buildProfileRoute(npub)}
         title="Open profile"
       >
@@ -142,24 +142,32 @@
           title={displayName}
           wrapperClass="border border-surface-lighter shadow-sm"
         />
-        <Name {pubkey} {profile} class="text-gray-300" />
+        <Name
+          {pubkey}
+          {profile}
+          class="inline-block max-w-28 overflow-hidden text-ellipsis whitespace-nowrap align-bottom text-gray-300 sm:max-w-40"
+        />
       </a>
     {:else}
-      <Name {pubkey} {profile} class="text-gray-300" />
+      <Name
+        {pubkey}
+        {profile}
+        class="inline-block max-w-28 overflow-hidden text-ellipsis whitespace-nowrap align-bottom text-gray-300 sm:max-w-40"
+      />
     {/if}
-    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={logout}>Logout</button>
+    <button class="btn-ghost shrink-0 px-2 py-1" disabled={busy} onclick={logout}>Logout</button>
   {:else}
-    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={doExtensionLogin}>Login Ext</button>
-    <button class="btn-ghost px-2 py-1" disabled={busy} onclick={toggleNsecLogin}>Login Nsec</button>
-    <button class="btn-secondary px-2 py-1" disabled={busy} onclick={doGenerateKeyLogin}>Generate Key</button>
+    <button class="btn-ghost shrink-0 px-2 py-1" disabled={busy} onclick={doExtensionLogin}>Login Ext</button>
+    <button class="btn-ghost shrink-0 px-2 py-1" disabled={busy} onclick={toggleNsecLogin}>Login Nsec</button>
+    <button class="btn-secondary shrink-0 px-2 py-1" disabled={busy} onclick={doGenerateKeyLogin}>Generate Key</button>
   {/if}
 </div>
 
 {#if showNsec}
-  <div class="mt-2 flex items-center gap-2">
+  <div class="mt-2 flex max-w-full min-w-0 flex-wrap items-center gap-2">
     <input
       type="password"
-      class="w-60 rounded-lg bg-surface-light border border-surface-lighter px-2 py-1 text-xs text-white outline-none focus:border-primary-op50"
+      class="min-w-0 max-w-full flex-1 rounded-lg border border-surface-lighter bg-surface-light px-2 py-1 text-xs text-white outline-none focus:border-primary-op50"
       bind:value={nsecInput}
       placeholder="nsec1..."
       autocomplete="off"

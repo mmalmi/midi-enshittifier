@@ -32,7 +32,7 @@
     onDelete = null,
   }: Props = $props()
 
-  const player = new MidiPlayer()
+  let player: MidiPlayer | null = null
 
   let originalMidi = $state<MidiFile | null>(null)
   let enshittifiedMidi = $state<MidiFile | null>(null)
@@ -52,36 +52,48 @@
   let enshittifiedPlaying = $derived(which === 'enshittified' && playing)
   let playbackProgress = $derived(duration > 0 ? (currentTime / duration) * 100 : 0)
 
-  player.onProgress((t, d) => {
-    currentTime = t
-    duration = d
-  })
+  function getPlayer(): MidiPlayer {
+    if (player) return player
 
-  player.onEnd(() => {
-    if (playing) {
-      playing = false
-      onPlaybackState?.(rowId, false)
-    }
-    currentTime = 0
-    duration = 0
-    which = null
-    loadingAudio = false
-  })
+    player = new MidiPlayer()
+    player.onProgress((t, d) => {
+      currentTime = t
+      duration = d
+    })
+    player.onEnd(() => {
+      if (playing) {
+        playing = false
+        onPlaybackState?.(rowId, false)
+      }
+      currentTime = 0
+      duration = 0
+      which = null
+      loadingAudio = false
+      originalMidi = null
+      enshittifiedMidi = null
+    })
+
+    return player
+  }
 
   onDestroy(() => {
     stop()
   })
 
-  function stop(clearWhich = true, cancelPending = true) {
+  function stop(clearWhich = true, cancelPending = true, releaseMidi = true) {
     if (cancelPending) playReq += 1
     const wasPlaying = playing
-    player.stop()
+    player?.stop()
     playing = false
     loadingAudio = false
     playError = null
     currentTime = 0
     duration = 0
     if (clearWhich) which = null
+    if (releaseMidi) {
+      originalMidi = null
+      enshittifiedMidi = null
+    }
     if (wasPlaying) {
       onPlaybackState?.(rowId, false)
     }
@@ -99,7 +111,7 @@
 
   async function play(version: 'original' | 'enshittified') {
     const req = playReq + 1
-    stop(false, false)
+    stop(false, false, false)
     playReq = req
     onActivatePlayback?.(rowId)
     loadingAudio = true
@@ -113,12 +125,13 @@
       const midi = version === 'original' ? originalMidi : enshittifiedMidi
       if (!midi || req !== playReq) return
 
-      await player.play(midi)
+      const activePlayer = getPlayer()
+      await activePlayer.play(midi)
       if (req !== playReq || which !== version) return
 
       loadingAudio = false
-      playing = player.playing
-      duration = player.duration
+      playing = activePlayer.playing
+      duration = activePlayer.duration
       if (playing) {
         onPlaybackState?.(rowId, true)
       }
@@ -128,6 +141,8 @@
       playing = false
       which = null
       playError = e instanceof Error ? e.message : 'Playback failed'
+      originalMidi = null
+      enshittifiedMidi = null
       onPlaybackState?.(rowId, false)
     }
   }
@@ -148,7 +163,7 @@
   })
 
   function seekToRatio(ratio: number) {
-    if (!which || duration <= 0) return
+    if (!player || !which || duration <= 0) return
     const nextTime = Math.max(0, Math.min(duration, duration * ratio))
     currentTime = nextTime
     player.seek(nextTime)
@@ -165,19 +180,24 @@
   onPlaybackSeek={seekToRatio}
 >
   {#snippet body()}
-    <div class="min-w-0">
+    <div class="min-w-0 w-full">
       <div class="truncate text-sm font-medium">{song.title}</div>
-      <div class="mt-1 flex items-center gap-2 text-xs text-gray-400">
+      <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400">
         {#if showOwner}
-          <Avatar
-            pubkey={song.ownerPubkey}
-            size={18}
-            wrapperClass="border border-surface-lighter shadow-sm"
-          />
-          <Name npub={song.ownerNpub} class="min-w-0 text-gray-400" />
+          <div class="flex min-w-0 items-center gap-2">
+            <Avatar
+              pubkey={song.ownerPubkey}
+              size={18}
+              wrapperClass="border border-surface-lighter shadow-sm"
+            />
+            <Name
+              npub={song.ownerNpub}
+              class="inline-block max-w-40 overflow-hidden text-ellipsis whitespace-nowrap align-bottom text-gray-400 sm:max-w-56"
+            />
+          </div>
           <span aria-hidden="true" class="text-gray-500">·</span>
         {/if}
-        <span>{formatRelativeTime(song.createdAt)}</span>
+        <span class="shrink-0">{formatRelativeTime(song.createdAt)}</span>
       </div>
       {#if playError}
         <div class="mt-1 text-xs text-red-400">{playError}</div>
@@ -186,57 +206,59 @@
   {/snippet}
 
   {#snippet actions()}
-    <button
-      type="button"
-      class="btn-ghost min-w-16 px-3 py-1.5 text-xs"
-      onclick={() => toggle('original')}
-      disabled={loadingAudio}
-      aria-label={originalPlaying ? `Stop original ${song.title}` : `Play original ${song.title}`}
-      title="Play original"
-    >
-      {#if originalLoading}
-        🦄
-      {:else if originalPlaying}
-        ⏹ Orig
-      {:else}
-        ▶ Orig
-      {/if}
-    </button>
-
-    <button
-      type="button"
-      class="btn-secondary min-w-16 px-3 py-1.5 text-xs"
-      onclick={() => toggle('enshittified')}
-      disabled={loadingAudio}
-      aria-label={enshittifiedPlaying ? `Stop enshittified ${song.title}` : `Play enshittified ${song.title}`}
-      title="Play enshittified"
-    >
-      {#if enshittifiedLoading}
-        🦄
-      {:else if enshittifiedPlaying}
-        ⏹ Ensh
-      {:else}
-        ▶ Ensh
-      {/if}
-    </button>
-
-    {#if showDelete && onDelete}
+    <div class="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
       <button
         type="button"
-        class="btn-ghost px-2 py-2 text-red-300 hover:text-red-100"
-        onclick={() => onDelete(song)}
-        disabled={deleteBusy}
-        aria-label={`Delete ${song.title}`}
-        title="Delete song"
+        class="btn-ghost min-w-16 px-3 py-1.5 text-xs"
+        onclick={() => toggle('original')}
+        disabled={loadingAudio}
+        aria-label={originalPlaying ? `Stop original ${song.title}` : `Play original ${song.title}`}
+        title="Play original"
       >
-        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M3 6h18" />
-          <path d="M8 6V4.75C8 4.34 8.34 4 8.75 4h6.5c.41 0 .75.34.75.75V6" />
-          <path d="M6.75 6l.9 12.08A2 2 0 0 0 9.64 20h4.72a2 2 0 0 0 1.99-1.92L17.25 6" />
-          <path d="M10 10.25v5.5" />
-          <path d="M14 10.25v5.5" />
-        </svg>
+        {#if originalLoading}
+          🦄
+        {:else if originalPlaying}
+          ⏹ Orig
+        {:else}
+          ▶ Orig
+        {/if}
       </button>
-    {/if}
+
+      <button
+        type="button"
+        class="btn-secondary min-w-16 px-3 py-1.5 text-xs"
+        onclick={() => toggle('enshittified')}
+        disabled={loadingAudio}
+        aria-label={enshittifiedPlaying ? `Stop enshittified ${song.title}` : `Play enshittified ${song.title}`}
+        title="Play enshittified"
+      >
+        {#if enshittifiedLoading}
+          🦄
+        {:else if enshittifiedPlaying}
+          ⏹ Ensh
+        {:else}
+          ▶ Ensh
+        {/if}
+      </button>
+
+      {#if showDelete && onDelete}
+        <button
+          type="button"
+          class="btn-ghost col-span-2 px-2 py-2 text-red-300 hover:text-red-100 sm:col-span-1"
+          onclick={() => onDelete(song)}
+          disabled={deleteBusy}
+          aria-label={`Delete ${song.title}`}
+          title="Delete song"
+        >
+          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 6h18" />
+            <path d="M8 6V4.75C8 4.34 8.34 4 8.75 4h6.5c.41 0 .75.34.75.75V6" />
+            <path d="M6.75 6l.9 12.08A2 2 0 0 0 9.64 20h4.72a2 2 0 0 0 1.99-1.92L17.25 6" />
+            <path d="M10 10.25v5.5" />
+            <path d="M14 10.25v5.5" />
+          </svg>
+        </button>
+      {/if}
+    </div>
   {/snippet}
 </ListRow>

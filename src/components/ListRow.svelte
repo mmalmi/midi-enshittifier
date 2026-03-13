@@ -48,15 +48,15 @@
     <div class="absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(255,78,168,0.18),transparent_26%),radial-gradient(circle_at_82%_76%,rgba(84,214,255,0.14),transparent_28%)] blur-2xl"></div>
   </div>
 
-  <div class="relative z-10 flex items-center gap-3 p-3">
+  <div class="relative z-10 flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
     {#if href}
-      <a class="min-w-0 flex-1 select-none no-underline text-white" {href} draggable="false">
+      <a class="block w-full min-w-0 flex-1 select-none no-underline text-white" {href} draggable="false">
         {@render body()}
       </a>
     {:else}
       <button
         type="button"
-        class="min-w-0 flex-1 cursor-pointer border-none bg-transparent p-0 text-left text-white select-none"
+        class="block w-full min-w-0 flex-1 cursor-pointer border-none bg-transparent p-0 text-left text-white select-none"
         draggable="false"
         onclick={() => onactivate?.()}
       >
@@ -65,7 +65,7 @@
     {/if}
 
     {#if actions}
-      <div class="flex shrink-0 items-center gap-2">
+      <div class="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">
         {@render actions()}
       </div>
     {/if}

@@ -300,7 +300,7 @@
     <div class="grid gap-3" data-testid="profile-song-list" role="list">
       {#each songs as song (song.id)}
         <div
-          class="relative transition-opacity duration-150 active:cursor-grabbing"
+          class="relative min-w-0 transition-opacity duration-150 active:cursor-grabbing"
           class:opacity-60={draggedSongId === song.id}
           class:cursor-grab={isOwn && !reorderBusy}
           data-testid="profile-song-row"

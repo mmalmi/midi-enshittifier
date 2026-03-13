@@ -43,27 +43,60 @@ const GM_NAMES: string[] = [
   'telephone_ring', 'helicopter', 'applause', 'gunshot',
 ]
 
-type SFInstrument = { play: (note: number | string, time: number, opts?: { duration?: number; gain?: number }) => { stop: (time?: number) => void } }
+type SFVoice = { stop: (time?: number) => void }
+
+type SFInstrument = {
+  play: (
+    note: number | string,
+    time: number,
+    opts?: { duration?: number; gain?: number },
+  ) => SFVoice
+}
 
 const SF_CDN = 'https://paulrosen.github.io/midi-js-soundfonts'
 
-// Global instrument cache across player instances
-const instrumentCache = new Map<string, Promise<SFInstrument>>()
+type SharedAudioState = {
+  ctx: AudioContext
+  master: GainNode
+}
+
+let sharedAudioStatePromise: Promise<SharedAudioState> | null = null
 
 function sfUrl(name: string, sf: string, format: string): string {
   return `${SF_CDN}/${sf || 'FluidR3_GM'}/${name}-${format || 'mp3'}.js`
 }
 
-function loadInstrument(ctx: AudioContext, name: string, dest: AudioNode): Promise<SFInstrument> {
-  const key = name
-  if (!instrumentCache.has(key)) {
-    instrumentCache.set(key, Soundfont.instrument(ctx, name as any, {
-      soundfont: 'FluidR3_GM',
-      destination: dest,
-      nameToUrl: sfUrl,
-    }) as Promise<SFInstrument>)
+async function getSharedAudioState(): Promise<SharedAudioState> {
+  if (!sharedAudioStatePromise) {
+    sharedAudioStatePromise = Promise.resolve().then(() => {
+      const ctx = new AudioContext()
+      const master = ctx.createGain()
+      master.gain.value = 0.5
+      master.connect(ctx.destination)
+      return { ctx, master }
+    })
   }
-  return instrumentCache.get(key)!
+
+  const state = await sharedAudioStatePromise
+
+  if (state.ctx.state === 'closed') {
+    sharedAudioStatePromise = null
+    return getSharedAudioState()
+  }
+
+  if (state.ctx.state === 'suspended') {
+    await state.ctx.resume().catch(() => {})
+  }
+
+  return state
+}
+
+function loadInstrument(ctx: AudioContext, name: string, dest: AudioNode): Promise<SFInstrument> {
+  return Soundfont.instrument(ctx, name as any, {
+    soundfont: 'FluidR3_GM',
+    destination: dest,
+    nameToUrl: sfUrl,
+  }) as Promise<SFInstrument>
 }
 
 export class MidiPlayer {
@@ -85,6 +118,8 @@ export class MidiPlayer {
   private currentMidi: MidiFile | null = null
   private loadedInstruments = new Map<string, SFInstrument>()
   private _loading = false
+  private activeVoiceTimers = new Set<ReturnType<typeof setTimeout>>()
+  private activeVoiceHandles = new Set<SFVoice>()
 
   get playing() { return this._playing }
   get loading() { return this._loading }
@@ -103,10 +138,12 @@ export class MidiPlayer {
     this.currentMidi = midi
     this._loading = true
 
-    const ctx = new AudioContext()
-    const master = ctx.createGain()
-    master.gain.value = 0.5
-    master.connect(ctx.destination)
+    const { ctx, master } = await getSharedAudioState()
+
+    if (session !== this.playSession) {
+      this._loading = false
+      return
+    }
 
     this.ctx = ctx
     this.master = master
@@ -124,7 +161,6 @@ export class MidiPlayer {
     }
 
     // Load soundfont instruments in parallel
-    instrumentCache.clear()
     this.loadedInstruments.clear()
     const entries = await Promise.all(
       [...needed].map(async (name) => {
@@ -144,7 +180,6 @@ export class MidiPlayer {
 
     if (session !== this.playSession || this.ctx !== ctx) {
       this._loading = false
-      void ctx.close().catch(() => {})
       return
     }
 
@@ -197,11 +232,26 @@ export class MidiPlayer {
     }
     this.noteQueue = []
     this.queueIdx = 0
-    this.ctx?.close()
+    for (const timer of this.activeVoiceTimers) {
+      clearTimeout(timer)
+    }
+    this.activeVoiceTimers.clear()
+
+    const stopAt = this.ctx?.currentTime
+    for (const voice of this.activeVoiceHandles) {
+      try {
+        voice.stop(stopAt)
+      } catch {
+        // Ignore instrument stop failures while tearing down playback.
+      }
+    }
+    this.activeVoiceHandles.clear()
+
     this.ctx = null
     this.master = null
     this._time = 0
     this.activeVoices = 0
+    this.loadedInstruments.clear()
   }
 
   fullStop() {
@@ -243,16 +293,20 @@ export class MidiPlayer {
         const dur = note.duration
         if (dur > 0) {
           const session = this.activeSession
-          entry.play(note.midi, t0, {
+          const voice = entry.play(note.midi, t0, {
             duration: dur,
             gain: note.velocity,
           })
+          this.activeVoiceHandles.add(voice)
           this.activeVoices++
           const ms = Math.max(0, (t0 - this.ctx.currentTime + Math.min(dur, 0.3) + 0.1) * 1000)
-          setTimeout(() => {
+          const timer = setTimeout(() => {
+            this.activeVoiceTimers.delete(timer)
+            this.activeVoiceHandles.delete(voice)
             if (session !== this.activeSession) return
             this.activeVoices = Math.max(0, this.activeVoices - 1)
           }, ms)
+          this.activeVoiceTimers.add(timer)
         }
       }
       this.queueIdx++
