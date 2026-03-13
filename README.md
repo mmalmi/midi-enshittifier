@@ -25,10 +25,13 @@ The current effect set includes:
 - CPU Throttle
 - Butter Fingers
 - Volume Rollercoaster
+- Buffer Loop
 - Echo Chamber
+- Octave Oops
 - Mood Swing
 - Devil's Interval
 - Tremolo Terror
+- Instrument Betrayal
 - Melody Hijack
 - Shred Solo
 

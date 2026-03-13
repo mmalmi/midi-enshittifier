@@ -291,12 +291,17 @@ export const shredSolo: Effect = {
       65,  // Alto Sax
     ]
 
-    // Find a free channel (skip 9)
+    // Give each solo its own channel so exported program changes do not conflict.
     const usedChannels = new Set(midi.tracks.map(t => t.channel))
-    let soloCh = 0
-    for (let c = 0; c < 16; c++) {
-      if (c === 9) continue
-      if (!usedChannels.has(c)) { soloCh = c; break }
+    function allocChannel(): number | null {
+      for (let c = 0; c < 16; c++) {
+        if (c === 9) continue
+        if (!usedChannels.has(c)) {
+          usedChannels.add(c)
+          return c
+        }
+      }
+      return null
     }
 
     const windowSize = 2 + rng() * 2 // 2-4s
@@ -326,7 +331,10 @@ export const shredSolo: Effect = {
         : soloInstruments[Math.floor(rng() * soloInstruments.length)]
 
       // Each solo gets its own track so it can have a different instrument
-      const track = addTrack(midi, soloCh)
+      const channel = allocChannel()
+      if (channel === null) return { start: soloStart, end: soloStart }
+
+      const track = addTrack(midi, channel)
       track.instrument = instrument
       soloTracks.push(track)
 

@@ -1,4 +1,4 @@
-import type { MidiTrack } from '../midi'
+import type { MidiFile, MidiTrack } from '../midi'
 import { addTrack, addNote } from '../midi'
 import type { Effect } from './types'
 
@@ -6,6 +6,25 @@ import type { Effect } from './types'
 
 function clampMidi(n: number): number {
   return Math.max(0, Math.min(127, n))
+}
+
+function clampVelocity(v: number, min = 0.01): number {
+  return Math.max(min, Math.min(1, v))
+}
+
+function songMaxTime(midi: MidiFile): number {
+  let maxTime = 0
+  for (const track of midi.tracks) {
+    for (const note of track.notes) {
+      maxTime = Math.max(maxTime, note.time + note.duration)
+    }
+  }
+  return maxTime
+}
+
+function beatDuration(midi: MidiFile): number {
+  const bpm = midi.header.tempos[0]?.bpm ?? 120
+  return 60 / bpm
 }
 
 type Phrase = MidiTrack['notes']
@@ -159,7 +178,7 @@ export const ghostDrums: Effect = {
       }
     }
 
-    // Basic beat: 1-2 moments of sudden rhythmic order
+    // Basic beat: 1-2 moments of sudden rhythmic order lasting 1-4 bars
     const bpm = midi.header.tempos.length > 0 ? midi.header.tempos[0].bpm : 120
     const beatDur = 60 / bpm
     const barDur = beatDur * 4
@@ -183,9 +202,11 @@ export const ghostDrums: Effect = {
     ]
 
     for (let b = 0; b < numBeats; b++) {
-      const beatStart = (rng() * (maxTime - barDur * 2))
-      if (beatStart < 0) continue
-      const bars = 1 + Math.floor(rng() * 2) // 1-2 bars
+      const bars = 1 + Math.floor(rng() * 4) // 1-4 bars
+      const phraseDur = barDur * bars
+      const latestStart = maxTime - phraseDur
+      if (latestStart < 0) continue
+      const beatStart = rng() * latestStart
       const pattern = patterns[Math.floor(rng() * patterns.length)]
       const vel = 0.55 + rng() * 0.3
       for (let bar = 0; bar < bars; bar++) {
@@ -256,16 +277,118 @@ export const butterFingers: Effect = {
 export const volumeRollercoaster: Effect = {
   id: 'volumeRollercoaster',
   name: 'Volume Rollercoaster',
-  description: 'Chaotic dynamics',
+  description: 'Bars lurch between whispers, blasts, and swells',
   emoji: '🎢',
-  defaultIntensity: 0.5,
+  defaultIntensity: 0.45,
   apply(midi, intensity, rng) {
+    const maxTime = songMaxTime(midi)
+    if (maxTime === 0) return
+
+    const barDur = beatDuration(midi) * 4
+    const chancePerBar = 0.14 + intensity * 0.32
+
     for (const track of midi.tracks) {
       if (track.channel === 9) continue
-      for (const note of track.notes) {
-        if (rng() < intensity * 0.5) {
-          const factor = 0.15 + rng() * 1.85
-          note.velocity = Math.max(0.01, Math.min(1, note.velocity * factor))
+
+      for (let barStart = 0; barStart < maxTime; barStart += barDur) {
+        if (rng() >= chancePerBar) continue
+
+        const shape = rng()
+        let startScale: number
+        let endScale: number
+
+        if (shape < 0.25) {
+          const level = 0.08 + rng() * 0.18
+          startScale = level
+          endScale = level
+        } else if (shape < 0.5) {
+          const level = 1.25 + rng() * 0.6
+          startScale = level
+          endScale = level
+        } else if (shape < 0.75) {
+          startScale = 0.18 + rng() * 0.2
+          endScale = 1.1 + rng() * 0.5
+        } else {
+          startScale = 1.1 + rng() * 0.5
+          endScale = 0.18 + rng() * 0.2
+        }
+
+        for (const note of track.notes) {
+          const center = note.time + note.duration * 0.5
+          if (center < barStart || center >= barStart + barDur) continue
+
+          const progress = Math.max(0, Math.min(1, (center - barStart) / barDur))
+          const factor = startScale + (endScale - startScale) * progress
+          note.velocity = clampVelocity(note.velocity * factor)
+        }
+      }
+    }
+  },
+}
+
+export const bufferLoop: Effect = {
+  id: 'bufferLoop',
+  name: 'Buffer Loop',
+  description: 'Sequencer gets stuck repeating a tiny fragment',
+  emoji: '🔁',
+  defaultIntensity: 0.35,
+  apply(midi, intensity, rng) {
+    const maxTime = songMaxTime(midi)
+    if (maxTime === 0) return
+
+    const beatDur = beatDuration(midi)
+    const grid = Math.max(0.1, beatDur * 0.5)
+    const incidents = 1 + Math.floor(intensity * 3)
+    const maxRepeats = 1 + Math.floor(intensity * 3)
+
+    for (let i = 0; i < incidents; i++) {
+      const fragmentBeats = 1 + Math.floor(rng() * 2)
+      const fragmentDur = fragmentBeats * beatDur
+      const repeats = 1 + Math.floor(rng() * maxRepeats)
+      const latestStart = maxTime - fragmentDur * (repeats + 1)
+      if (latestStart <= 0) continue
+
+      const rawStart = rng() * latestStart
+      const loopStart = Math.max(0, Math.round(rawStart / grid) * grid)
+      const loopEnd = loopStart + fragmentDur
+
+      const captured: Array<{
+        track: MidiTrack
+        midi: number
+        time: number
+        duration: number
+        velocity: number
+      }> = []
+
+      for (const track of midi.tracks) {
+        const snapshot = [...track.notes]
+        for (const note of snapshot) {
+          const noteEnd = note.time + note.duration
+          if (note.time >= loopEnd || noteEnd <= loopStart) continue
+
+          const start = Math.max(note.time, loopStart)
+          const end = Math.min(noteEnd, loopEnd)
+          captured.push({
+            track,
+            midi: note.midi,
+            time: start,
+            duration: Math.max(0.03, end - start),
+            velocity: note.velocity,
+          })
+        }
+      }
+
+      if (captured.length === 0) continue
+
+      for (let repeat = 1; repeat <= repeats; repeat++) {
+        const offset = repeat * fragmentDur
+        for (const note of captured) {
+          addNote(note.track, {
+            midi: note.midi,
+            time: note.time + offset,
+            duration: note.duration,
+            velocity: clampVelocity(note.velocity * Math.pow(0.88, repeat), 0.05),
+          })
         }
       }
     }
@@ -351,38 +474,72 @@ export const octaveOops: Effect = {
 export const moodSwing: Effect = {
   id: 'moodSwing',
   name: 'Mood Swing',
-  description: 'Minor becomes major, major becomes minor',
+  description: 'Whole phrases slip into the parallel mode',
   emoji: '🎭',
-  defaultIntensity: 0.6,
+  defaultIntensity: 0.55,
   apply(midi, intensity, rng) {
+    const histogram = new Array(12).fill(0)
+    let maxTime = 0
+
     for (const track of midi.tracks) {
       if (track.channel === 9) continue
+      for (const note of track.notes) {
+        histogram[note.midi % 12] += note.duration
+        maxTime = Math.max(maxTime, note.time + note.duration)
+      }
+    }
+    if (maxTime === 0) return
 
-      const sorted = [...track.notes].sort((a, b) => a.time - b.time)
-      const groups: (typeof sorted)[] = []
-      let cur: typeof sorted = []
-      let groupStart = -1
+    const majorT = [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1]
+    const minorT = [1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0]
 
-      for (const note of sorted) {
-        if (groupStart < 0 || note.time - groupStart > 0.06) {
-          if (cur.length) groups.push(cur)
-          cur = [note]
-          groupStart = note.time
-        } else {
-          cur.push(note)
+    let bestRoot = 0
+    let bestMode: 'major' | 'minor' = 'major'
+    let bestScore = -1
+    for (let root = 0; root < 12; root++) {
+      for (const [template, mode] of [[majorT, 'major'], [minorT, 'minor']] as const) {
+        let score = 0
+        for (let i = 0; i < 12; i++) {
+          score += histogram[(root + i) % 12] * template[i]
+        }
+        if (score > bestScore) {
+          bestScore = score
+          bestRoot = root
+          bestMode = mode
         }
       }
-      if (cur.length) groups.push(cur)
+    }
 
-      for (const group of groups) {
-        if (group.length < 2 || rng() > intensity * 0.5) continue
-        const byPitch = [...group].sort((a, b) => a.midi - b.midi)
-        for (let i = 1; i < byPitch.length; i++) {
-          const interval = byPitch[i].midi - byPitch[i - 1].midi
-          if (interval === 3) byPitch[i].midi += 1        // minor third -> major
-          else if (interval === 4) byPitch[i].midi -= 1   // major third -> minor
+    const barDur = beatDuration(midi) * 4
+    const chancePerBar = 0.12 + intensity * 0.28
+    const targetPCs = bestMode === 'major' ? [4, 9, 11] : [3, 8, 10]
+    const shift = bestMode === 'major' ? -1 : 1
+
+    for (let barStart = 0; barStart < maxTime;) {
+      if (rng() >= chancePerBar) {
+        barStart += barDur
+        continue
+      }
+
+      const spanBars = 1 + Math.floor(rng() * (1 + intensity * 2))
+      const windowEnd = Math.min(maxTime, barStart + spanBars * barDur)
+      let changed = false
+
+      for (const track of midi.tracks) {
+        if (track.channel === 9) continue
+        for (const note of track.notes) {
+          const center = note.time + note.duration * 0.5
+          if (center < barStart || center >= windowEnd) continue
+
+          const pitchClass = ((note.midi - bestRoot) % 12 + 12) % 12
+          if (!targetPCs.includes(pitchClass)) continue
+
+          note.midi = clampMidi(note.midi + shift)
+          changed = true
         }
       }
+
+      barStart = changed ? windowEnd : barStart + barDur
     }
   },
 }
@@ -400,10 +557,10 @@ export const devilsInterval: Effect = {
       for (const note of origNotes) {
         if (rng() < intensity * 0.25) {
           addNote(track, {
-            midi: Math.min(127, note.midi + 6), // tritone
+            midi: clampMidi(note.midi + 6), // tritone
             time: note.time,
             duration: note.duration,
-            velocity: note.velocity * 0.7,
+            velocity: clampVelocity(note.velocity * 0.7),
           })
         }
       }
@@ -440,9 +597,109 @@ export const tremoloTerror: Effect = {
             midi: note.midi,
             time: note.time + h * speed,
             duration: speed * 0.75,
-            velocity: note.velocity * (0.4 + rng() * 0.6),
+            velocity: clampVelocity(note.velocity * (0.4 + rng() * 0.6)),
           })
         }
+      }
+    }
+  },
+}
+
+export const instrumentBetrayal: Effect = {
+  id: 'instrumentBetrayal',
+  name: 'Instrument Betrayal',
+  description: 'A whole section gets reassigned to the worst possible patch',
+  emoji: '🪗',
+  defaultIntensity: 0.35,
+  apply(midi, intensity, rng) {
+    const maxTime = songMaxTime(midi)
+    if (maxTime === 0) return
+
+    const sourceTracks = midi.tracks.filter((track) => track.channel !== 9 && track.notes.length > 0)
+    if (sourceTracks.length === 0) return
+
+    const barDur = beatDuration(midi) * 4
+    const betrayalPrograms = [
+      3,   // Honky-tonk Piano
+      13,  // Xylophone
+      21,  // Accordion
+      75,  // Pan Flute
+      78,  // Whistle
+      104, // Sitar
+      109, // Bagpipe
+      110, // Fiddle
+      112, // Tinkle Bell
+      114, // Steel Drums
+    ]
+
+    const usedChannels = new Set(midi.tracks.map((track) => track.channel))
+    function allocChannel(): number | null {
+      for (let channel = 0; channel < 16; channel++) {
+        if (channel === 9) continue
+        if (!usedChannels.has(channel)) {
+          usedChannels.add(channel)
+          return channel
+        }
+      }
+      return null
+    }
+
+    const betrayals = Math.max(1, 1 + Math.floor(intensity * 3))
+
+    for (let i = 0; i < betrayals; i++) {
+      const src = sourceTracks[Math.floor(rng() * sourceTracks.length)]
+      const sectionBars = 2 + Math.floor(rng() * (1 + intensity * 3))
+      const sectionDur = sectionBars * barDur
+      const latestStart = Math.max(0, maxTime - sectionDur)
+      const windowStart = latestStart === 0
+        ? 0
+        : Math.floor((rng() * latestStart) / barDur) * barDur
+      const windowEnd = Math.min(maxTime, windowStart + sectionDur)
+
+      const clipped: Array<{
+        srcIdx: number
+        midi: number
+        time: number
+        duration: number
+        velocity: number
+      }> = []
+
+      for (let noteIndex = 0; noteIndex < src.notes.length; noteIndex++) {
+        const note = src.notes[noteIndex]
+        const noteEnd = note.time + note.duration
+        if (note.time >= windowEnd || noteEnd <= windowStart) continue
+
+        const transposeRoll = rng()
+        const transpose = transposeRoll < 0.2 ? -12 : transposeRoll > 0.85 ? 12 : 0
+        clipped.push({
+          srcIdx: noteIndex,
+          midi: clampMidi(note.midi + transpose),
+          time: Math.max(note.time, windowStart),
+          duration: Math.max(0.03, Math.min(noteEnd, windowEnd) - Math.max(note.time, windowStart)),
+          velocity: clampVelocity(note.velocity * (1.05 + rng() * 0.35), 0.1),
+        })
+      }
+
+      if (clipped.length === 0) continue
+
+      const channel = allocChannel()
+      if (channel === null) break
+
+      const betrayalTrack = addTrack(midi, channel)
+      betrayalTrack.instrument = betrayalPrograms[Math.floor(rng() * betrayalPrograms.length)]
+
+      for (const note of clipped) {
+        addNote(betrayalTrack, {
+          midi: note.midi,
+          time: note.time,
+          duration: note.duration,
+          velocity: note.velocity,
+        })
+      }
+
+      for (const note of clipped) {
+        const srcNote = src.notes[note.srcIdx]
+        srcNote.velocity = clampVelocity(srcNote.velocity * (0.12 + rng() * 0.2), 0.05)
       }
     }
   },

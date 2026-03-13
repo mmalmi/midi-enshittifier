@@ -77,6 +77,30 @@ function createSyncMidi(): MidiFile {
   return midi
 }
 
+function createMoodSwingMidi(): MidiFile {
+  const midi = createMidi()
+  const lead = addTrack(midi, 0)
+  ;[60, 62, 64, 65, 67, 69, 71, 72].forEach((n, i) => {
+    addNote(lead, { midi: n, time: i * 0.25, duration: 0.22, velocity: 0.8 })
+  })
+  return midi
+}
+
+function createLoopMidi(): MidiFile {
+  const midi = createMidi()
+  const lead = addTrack(midi, 0)
+  addNote(lead, { midi: 60, time: 0, duration: 0.2, velocity: 0.8 })
+  addNote(lead, { midi: 64, time: 1.0, duration: 0.2, velocity: 0.75 })
+  return midi
+}
+
+function createLongGhostMidi(): MidiFile {
+  const midi = createMidi()
+  const lead = addTrack(midi, 0)
+  addNote(lead, { midi: 60, time: 0, duration: 10, velocity: 0.8 })
+  return midi
+}
+
 function createHijackMidi(): MidiFile {
   const midi = createMidi()
 
@@ -235,6 +259,19 @@ describe('ghostDrums', () => {
     const drumTrack = midi.tracks[midi.tracks.length - 1]
     expect(drumTrack.notes.length).toBeGreaterThan(0)
   })
+
+  it('can extend the basic beat to four bars', () => {
+    const midi = createLongGhostMidi()
+    const values = [0.8, 0.99, 0, 0, 0]
+    let i = 0
+    const rng = () => values[i++] ?? 0
+
+    getEffect('ghostDrums').apply(midi, 0, rng)
+
+    const drumTrack = midi.tracks[midi.tracks.length - 1]
+    expect(drumTrack.notes.length).toBe(48)
+    expect(Math.max(...drumTrack.notes.map((note) => note.time))).toBeCloseTo(7.75)
+  })
 })
 
 describe('cpuThrottle', () => {
@@ -293,6 +330,20 @@ describe('volumeRollercoaster', () => {
       expect(v).toBeGreaterThanOrEqual(0.01)
       expect(v).toBeLessThanOrEqual(1)
     }
+  })
+})
+
+describe('bufferLoop', () => {
+  it('repeats a short fragment later in the timeline', () => {
+    const midi = createLoopMidi()
+    const lead = midi.tracks.find((t) => t.channel === 0)!
+
+    getEffect('bufferLoop').apply(midi, 1.0, scriptedRng([0, 0, 0], 0))
+
+    expect(lead.notes.length).toBeGreaterThan(2)
+    expect(
+      lead.notes.some((note) => note.midi === 60 && note.time === 0.5 && note.duration === 0.2),
+    ).toBe(true)
   })
 })
 
@@ -374,12 +425,13 @@ describe('percussion preservation', () => {
 })
 
 describe('moodSwing', () => {
-  it('swaps thirds in chords', () => {
-    const midi = createChordMidi()
-    const before = collectPitches(midi)
-    getEffect('moodSwing').apply(midi, 1.0, mulberry32(42))
-    const after = collectPitches(midi)
-    expect(after).not.toEqual(before)
+  it('can flip melody notes into the parallel mode inside a phrase', () => {
+    const midi = createMoodSwingMidi()
+    const lead = midi.tracks.find((t) => t.channel === 0)!
+
+    getEffect('moodSwing').apply(midi, 1.0, scriptedRng([0, 0], 0))
+
+    expect(lead.notes.map((note) => note.midi)).toEqual([60, 62, 63, 65, 67, 68, 70, 72])
   })
 })
 
@@ -408,6 +460,29 @@ describe('tremoloTerror', () => {
     const before = totalNotes(midi)
     getEffect('tremoloTerror').apply(midi, 1.0, mulberry32(42))
     expect(totalNotes(midi)).toBeGreaterThan(before)
+  })
+})
+
+describe('instrumentBetrayal', () => {
+  it('adds wrong-instrument takeover tracks and ducks the source', () => {
+    const midi = createTestMidi()
+    const tracksBefore = midi.tracks.length
+    const lead = midi.tracks.find((t) => t.channel === 0)!
+    const leadBefore = lead.notes.map((note) => note.velocity)
+
+    getEffect('instrumentBetrayal').apply(midi, 1.0, scriptedRng([0, 0, 0, 0], 0))
+
+    const betrayalPrograms = new Set([3, 13, 21, 75, 78, 104, 109, 110, 112, 114])
+    const takeoverTracks = midi.tracks.slice(tracksBefore)
+    expect(takeoverTracks.length).toBeGreaterThan(0)
+    for (const track of takeoverTracks) {
+      expect(track.channel).not.toBe(9)
+      expect(betrayalPrograms.has(track.instrument)).toBe(true)
+      expect(track.notes.length).toBeGreaterThan(0)
+    }
+
+    const leadAfter = lead.notes.map((note) => note.velocity)
+    expect(leadAfter.some((velocity, i) => velocity !== leadBefore[i])).toBe(true)
   })
 })
 
@@ -531,6 +606,21 @@ describe('shredSolo', () => {
     getEffect('shredSolo').apply(midi, 1.0, mulberry32(7))
     const instruments = new Set(soloTracks(midi, tb).map(t => t.instrument))
     expect(instruments.size).toBeGreaterThanOrEqual(1)
+  })
+
+  it('assigns generated solos to distinct channels when channels are available', () => {
+    const midi = createTestMidi()
+    const extra = addTrack(midi, 2)
+    for (let i = 0; i < 40; i++) {
+      addNote(extra, { midi: 60, time: i * 0.5, duration: 0.4, velocity: 0.8 })
+    }
+
+    const tb = midi.tracks.length
+    getEffect('shredSolo').apply(midi, 1.0, scriptedRng([0], 0))
+
+    const tracks = soloTracks(midi, tb)
+    expect(tracks.length).toBeGreaterThan(1)
+    expect(new Set(tracks.map((track) => track.channel)).size).toBe(tracks.length)
   })
 
   it('toccata motif follows tonic and fits solo duration', () => {
