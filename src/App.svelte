@@ -479,7 +479,7 @@
   <footer class="mt-8 pb-4 text-center text-xs text-gray-500">
     <a
       class="text-gray-400 no-underline transition-colors hover:text-primary"
-      href="https://files.iris.to/#/npub1xndmdgymsf4a34rzr7346vp8qcptxf75pjqweh8naa8rklgxpfqqmfjtce/midi-enshittifier"
+      href="https://files.iris.to/#/npub1xdhnr9mrv47kkrn95k6cwecearydeh8e895990n3acntwvmgk2dsdeeycm/midi-enshittifier"
       target="_blank"
       rel="noreferrer"
     >
